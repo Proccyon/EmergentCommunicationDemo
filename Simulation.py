@@ -55,25 +55,28 @@ class Creature:
 
     def walk(self, sim):
 
-        if sim.foodArray[self.x, self.y] > 0:
+        freeDirections = self.getFreeDirections(sim)
+        if sim.foodArray[self.x, self.y] > 0 or len(freeDirections) == 0:
             return
 
         r = sim.creatureSmellRange
         xmin, xmax = max(0, self.x - r), min(sim.Lx-1, self.x + r + 1)
         ymin, ymax = max(0, self.y - r), min(sim.Ly-1, self.y + r + 1)
 
-        foods = sim.foodArray[xmin:xmax, ymin:ymax]
+        foods = sim.foodArray
 
-        sUp = np.sum(foods[:, r+1:2*r+1])
-        sDown = np.sum(foods[:, 0:r])
-        sRight = np.sum(foods[r+1:2*r+1, :])
-        sLeft = np.sum(foods[0:r, :])
+        sUp = np.sum(foods[xmin:xmax, self.y+1:ymax] * (sim.creatureArray[xmin:xmax, self.y+1:ymax] == None))
+        sDown = np.sum(foods[xmin:xmax, ymin:self.y] * (sim.creatureArray[xmin:xmax, ymin:self.y] == None))
+        sRight = np.sum(foods[self.x+1:xmax, ymin:ymax] * (sim.creatureArray[self.x+1:xmax, ymin:ymax] == None))
+        sLeft = np.sum(foods[xmin:self.x, ymin:ymax] * (sim.creatureArray[xmin:self.x, ymin:ymax] == None))
+        foodValues = np.array([sUp, sDown, sRight, sLeft])
 
-        directions = [[0, 1], [0, -1], [1, 0], [-1, 0]]
-        if sUp+sDown+sRight+sLeft == 0:
-            dp = directions[np.random.randint(4)]
+        directions = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]])
+        if np.sum(foodValues) == 0:
+            dp = freeDirections[np.random.randint(len(freeDirections))]
         else:
-            dp = np.array(directions[np.argmax([sUp, sDown, sRight, sLeft])])
+            maxDirections = directions[foodValues == np.amax(foodValues)]
+            dp = np.array(maxDirections[np.random.randint(len(maxDirections))])
 
         self.move(self.x+dp[0], self.y+dp[1], sim)
 
@@ -81,6 +84,18 @@ class Creature:
 
         if self.energy < sim.creatureOffspringEnergy:
             return
+
+        directions = self.getFreeDirections(sim)
+
+        if len(directions) == 0:
+            return
+
+        direction = directions[np.random.randint(len(directions))]
+
+        sim.addCreature(self.x+direction[0], self.y+direction[1], self.energy / 2)
+        self.energy /= 2
+
+    def getFreeDirections(self, sim):
 
         directions = []
         if self.x > 0 and sim.creatureArray[self.x-1, self.y] == None:
@@ -92,15 +107,7 @@ class Creature:
         if self.y < sim.Ly-1 and sim.creatureArray[self.x, self.y+1] == None:
             directions.append([0,1])
 
-        if len(directions) == 0:
-            return
-
-        direction = directions[np.random.randint(len(directions))]
-
-        sim.addCreature(self.x+direction[0], self.y+direction[1], self.energy / 2)
-        self.energy /= 2
-
-
+        return directions
 
 
 class Simulation:
@@ -114,15 +121,15 @@ class Simulation:
         self.creatureList = []
         self.foodArray = np.zeros((Lx,Ly), dtype=float)
 
-        self.foodSpawnChance = 0.001  # Food spawn chance per tile per tick
-        self.foodInitEnergy = 100
+        self.foodSpawnChance = 0.0002  # Food spawn chance per tile per tick
+        self.foodInitEnergy = 50
 
         self.creatureSpawnChance = 0.05  # Creature spawn chance per tile per tick
         self.creatureInitEnergy = 100
         self.creatureOffspringEnergy = 200
 
         self.creatureEatEnergy = 5
-        self.creatureDrainEnergy = 1.2
+        self.creatureDrainEnergy = 1.5
 
         self.creatureSmellRange = 3
 
