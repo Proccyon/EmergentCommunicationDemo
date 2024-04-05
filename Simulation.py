@@ -3,15 +3,19 @@
 import numpy as np
 import pyglet
 from pyglet import shapes
+from CommNetwork import CommNetwork
 
 class Creature:
 
-    def __init__(self, energy, x, y, id):
+    def __init__(self, energy, x, y, id, network):
 
         self.energy = energy
         self.x = x
         self.y = y
         self.id = id
+        self.network = network
+        self.toBeDestroyed = False
+        self.battledCreatures = []
 
     def destroy(self, sim):
         sim.creatureArray[self.x,self.y] = None
@@ -65,10 +69,15 @@ class Creature:
 
         foods = sim.foodArray
 
-        sUp = np.sum(foods[xmin:xmax, self.y+1:ymax] * (sim.creatureArray[xmin:xmax, self.y+1:ymax] == None))
-        sDown = np.sum(foods[xmin:xmax, ymin:self.y] * (sim.creatureArray[xmin:xmax, ymin:self.y] == None))
-        sRight = np.sum(foods[self.x+1:xmax, ymin:ymax] * (sim.creatureArray[self.x+1:xmax, ymin:ymax] == None))
-        sLeft = np.sum(foods[xmin:self.x, ymin:ymax] * (sim.creatureArray[xmin:self.x, ymin:ymax] == None))
+        sUp = np.sum(foods[xmin:xmax, self.y+1:ymax])
+        sDown = np.sum(foods[xmin:xmax, ymin:self.y])
+        sRight = np.sum(foods[self.x+1:xmax, ymin:ymax])
+        sLeft = np.sum(foods[xmin:self.x, ymin:ymax])
+
+        # sUp = np.sum(foods[xmin:xmax, self.y+1:ymax] * (sim.creatureArray[xmin:xmax, self.y+1:ymax] == None))
+        # sDown = np.sum(foods[xmin:xmax, ymin:self.y] * (sim.creatureArray[xmin:xmax, ymin:self.y] == None))
+        # sRight = np.sum(foods[self.x+1:xmax, ymin:ymax] * (sim.creatureArray[self.x+1:xmax, ymin:ymax] == None))
+        # sLeft = np.sum(foods[xmin:self.x, ymin:ymax] * (sim.creatureArray[xmin:self.x, ymin:ymax] == None))
         foodValues = np.array([sUp, sDown, sRight, sLeft])
 
         directions = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]])
@@ -79,6 +88,8 @@ class Creature:
             dp = np.array(maxDirections[np.random.randint(len(maxDirections))])
 
         self.move(self.x+dp[0], self.y+dp[1], sim)
+        self.battleArea(sim)
+
 
     def replicate(self, sim):
 
@@ -92,8 +103,11 @@ class Creature:
 
         direction = directions[np.random.randint(len(directions))]
 
-        sim.addCreature(self.x+direction[0], self.y+direction[1], self.energy / 2)
-        self.energy /= 2
+        xChild, yChild = self.x+direction[0], self.y+direction[1]
+        childEnergy = self.energy / 2
+        childNetwork = self.network.copy()
+        sim.addCreature(xChild, yChild, childEnergy, childNetwork)
+        self.energy = childEnergy
 
     def getFreeDirections(self, sim):
 
@@ -109,6 +123,49 @@ class Creature:
 
         return directions
 
+    def getOccupiedDirections(self, sim):
+
+        directions = []
+        if self.x > 0 and sim.creatureArray[self.x-1, self.y] != None:
+            directions.append([-1,0])
+        if self.x < sim.Lx-1 and sim.creatureArray[self.x+1, self.y] != None:
+            directions.append([1,0])
+        if self.y > 0 and sim.creatureArray[self.x, self.y-1] != None:
+            directions.append([0,-1])
+        if self.y < sim.Ly-1 and sim.creatureArray[self.x, self.y+1] != None:
+            directions.append([0,1])
+
+        return directions
+
+    def battleArea(self, sim):
+
+        for direction in self.getOccupiedDirections(sim):
+            otherCreature = sim.creatureArray[self.x+direction[0], self.y+direction[1]]
+            if otherCreature.id not in self.battledCreatures:
+                self.battle(otherCreature)
+
+    def battle(self, otherCreature):
+
+        if self.toBeDestroyed or otherCreature.toBeDestroyed:
+            return
+
+        messageIn = None
+        messageOut = None
+        for i in range(3):
+            messageOut = self.network.respond(messageIn)
+            messageIn = otherCreature.network.respond(messageOut)
+
+        otherCreature.toBeDestroyed = self.network.getDecision(messageIn)
+        self.toBeDestroyed = otherCreature.network.getDecision(messageOut)
+
+        if otherCreature.toBeDestroyed or self.toBeDestroyed:
+            print(f"Creature died in combat {[otherCreature.toBeDestroyed, self.toBeDestroyed]}")
+
+        self.battledCreatures.append(otherCreature.id)
+        otherCreature.battledCreatures.append(self.id)
+
+
+
 
 class Simulation:
 
@@ -121,7 +178,7 @@ class Simulation:
         self.creatureList = []
         self.foodArray = np.zeros((Lx,Ly), dtype=float)
 
-        self.foodSpawnChance = 0.0002  # Food spawn chance per tile per tick
+        self.foodSpawnChance = 0.001  # Food spawn chance per tile per tick
         self.foodInitEnergy = 50
 
         self.creatureSpawnChance = 0.05  # Creature spawn chance per tile per tick
@@ -129,7 +186,7 @@ class Simulation:
         self.creatureOffspringEnergy = 200
 
         self.creatureEatEnergy = 5
-        self.creatureDrainEnergy = 1.5
+        self.creatureDrainEnergy = 1
 
         self.creatureSmellRange = 3
 
@@ -139,12 +196,14 @@ class Simulation:
 
         self.idCounter = 0
 
+        self.messageSize = 3
+
 
         self.spawnCreatures()
 
-    def addCreature(self, x, y, energy):
+    def addCreature(self, x, y, energy, network):
 
-        creature = Creature(energy, x, y, self.idCounter)
+        creature = Creature(energy, x, y, self.idCounter, network)
         self.creatureArray[x, y] = creature
         self.creatureList.append(creature)
         self.idCounter += 1
@@ -174,7 +233,7 @@ class Simulation:
 
         for i in filledIndices:
             x, y = emptySpots[0, i], emptySpots[1, i]
-            self.addCreature(x, y, self.creatureInitEnergy)
+            self.addCreature(x, y, self.creatureInitEnergy, CommNetwork(self.messageSize))
 
     def creatureFeeding(self):
 
@@ -196,6 +255,9 @@ class Simulation:
         for creature in self.creatureList:
             creature.replicate(self)
 
+
+
+
     def step(self):
 
         self.spawnFood()
@@ -207,7 +269,7 @@ class Simulation:
 
         creaturesToDestroy = []
         for creature in self.creatureList:
-            if creature.energy <= 0:
+            if creature.energy <= 0 or creature.toBeDestroyed:
                 creaturesToDestroy.append(creature)
 
         for creature in creaturesToDestroy:
