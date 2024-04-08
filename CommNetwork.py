@@ -14,9 +14,9 @@ class CommNetwork:
         self.Bo = np.zeros((1))  #Bias on attack signal
 
         self.p = 0.1
-        self.std = 0.1
+        self.std = 1
 
-    def copy(self):
+    def copy(self, doMutation):
 
         child = CommNetwork(self.messageSize)
         child.Mss = np.copy(self.Mss)
@@ -24,7 +24,9 @@ class CommNetwork:
         child.Bs = np.copy(self.Bs)
         child.Bo = np.copy(self.Bo)
 
-        child.mutate(self.p, self.std)
+        if doMutation:
+            child.mutate(self.p, self.std)
+
         return child
 
     def respond(self, Input = None):

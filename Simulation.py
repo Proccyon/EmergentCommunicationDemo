@@ -3,11 +3,14 @@
 import numpy as np
 import pyglet
 from pyglet import shapes
+import time
+import matplotlib.pyplot as plt
+
 from CommNetwork import CommNetwork
 
 class Creature:
 
-    def __init__(self, energy, x, y, id, network):
+    def __init__(self, energy, x, y, id, network, canMutate):
 
         self.energy = energy
         self.x = x
@@ -16,8 +19,13 @@ class Creature:
         self.network = network
         self.toBeDestroyed = False
         self.battledCreatures = []
+        self.canMutate = canMutate
 
     def destroy(self, sim):
+
+        if self.toBeDestroyed:
+            sim.bloodArray[self.x, self.y] += 100
+
         sim.creatureArray[self.x,self.y] = None
 
         placement = 0
@@ -26,8 +34,9 @@ class Creature:
                 placement = i
                 break
 
-        print("creature destroyed")
         del sim.creatureList[placement]
+
+
 
 
     def move(self, xNew, yNew, sim):
@@ -105,8 +114,8 @@ class Creature:
 
         xChild, yChild = self.x+direction[0], self.y+direction[1]
         childEnergy = self.energy / 2
-        childNetwork = self.network.copy()
-        sim.addCreature(xChild, yChild, childEnergy, childNetwork)
+        childNetwork = self.network.copy(self.canMutate)
+        sim.addCreature(xChild, yChild, childEnergy, childNetwork, self.canMutate)
         self.energy = childEnergy
 
     def getFreeDirections(self, sim):
@@ -158,9 +167,6 @@ class Creature:
         otherCreature.toBeDestroyed = self.network.getDecision(messageIn)
         self.toBeDestroyed = otherCreature.network.getDecision(messageOut)
 
-        if otherCreature.toBeDestroyed or self.toBeDestroyed:
-            print(f"Creature died in combat {[otherCreature.toBeDestroyed, self.toBeDestroyed]}")
-
         self.battledCreatures.append(otherCreature.id)
         otherCreature.battledCreatures.append(self.id)
 
@@ -177,6 +183,10 @@ class Simulation:
         self.creatureArray = np.empty((Lx,Ly), dtype=Creature)
         self.creatureList = []
         self.foodArray = np.zeros((Lx,Ly), dtype=float)
+        self.bloodArray = np.zeros((Lx, Ly), dtype=float)
+
+        self.muteCreatureCountLog = []
+        self.commCreatureCountLog = []
 
         self.foodSpawnChance = 0.001  # Food spawn chance per tile per tick
         self.foodInitEnergy = 50
@@ -188,11 +198,13 @@ class Simulation:
         self.creatureEatEnergy = 5
         self.creatureDrainEnergy = 1
 
+        self.bloodDecayRate = 1
+
         self.creatureSmellRange = 3
 
         self.windowSize = 500
 
-        self.creatureSize = 15
+        self.creatureSize = 8
 
         self.idCounter = 0
 
@@ -201,9 +213,9 @@ class Simulation:
 
         self.spawnCreatures()
 
-    def addCreature(self, x, y, energy, network):
+    def addCreature(self, x, y, energy, network, canMutate):
 
-        creature = Creature(energy, x, y, self.idCounter, network)
+        creature = Creature(energy, x, y, self.idCounter, network, canMutate)
         self.creatureArray[x, y] = creature
         self.creatureList.append(creature)
         self.idCounter += 1
@@ -233,7 +245,9 @@ class Simulation:
 
         for i in filledIndices:
             x, y = emptySpots[0, i], emptySpots[1, i]
-            self.addCreature(x, y, self.creatureInitEnergy, CommNetwork(self.messageSize))
+            canMutate = np.random.random() > 0.5
+
+            self.addCreature(x, y, self.creatureInitEnergy, CommNetwork(self.messageSize), canMutate)
 
     def creatureFeeding(self):
 
@@ -255,7 +269,10 @@ class Simulation:
         for creature in self.creatureList:
             creature.replicate(self)
 
+    def decayBlood(self):
 
+        self.bloodArray -= self.bloodDecayRate
+        self.bloodArray[self.bloodArray < 0] = 0
 
 
     def step(self):
@@ -266,11 +283,23 @@ class Simulation:
         self.creatureFeeding()
         self.creatureEnergyDrain()
         self.creatureReplicate()
+        self.decayBlood()
 
         creaturesToDestroy = []
+        muteCreatureCount = 0
+        commCreatureCount = 0
+
         for creature in self.creatureList:
             if creature.energy <= 0 or creature.toBeDestroyed:
                 creaturesToDestroy.append(creature)
+
+            if creature.canMutate:
+                commCreatureCount += 1
+            else:
+                muteCreatureCount += 1
+
+        self.muteCreatureCountLog.append(muteCreatureCount)
+        self.commCreatureCountLog.append(commCreatureCount)
 
         for creature in creaturesToDestroy:
             creature.destroy(self)
@@ -283,19 +312,36 @@ class Simulation:
 
         size = self.creatureSize
 
+        cFood = (50, 225, 30)
+        cBlood = (255, 0, 0)
+
         foodDrawings = []
         for x in range(self.Lx):
             for y in range(self.Ly):
 
-                s = self.foodArray[x, y] / self.foodInitEnergy
-                foodColor = (int(s*50), int(s*225), int(s*30))
-                foodDrawing = shapes.Rectangle(size * x, size * y, size, size, color=foodColor, batch=batch)
+                sFood = self.foodArray[x, y] / self.foodInitEnergy
+                sBlood = np.amin([self.bloodArray[x, y] / 100, 1])
+
+
+                if sFood + sBlood > 0:
+                    color = [int(sFood * cFood[i] + sBlood * cBlood[i] - 0.5 * sFood * sBlood * (cFood[i] + cBlood[i])) for i in range(len(cFood))]
+                else:
+                    continue
+
+                foodDrawing = shapes.Rectangle(size * x, size * y, size, size, color=color, batch=batch)
                 foodDrawings.append(foodDrawing)
 
         creatureDrawings = []
+        commCreatureColor = [55,55,255]
+        muteCreatureColor = [200, 200, 0]
         for creature in self.creatureList:
             s = min(1, creature.energy / self.foodInitEnergy)
-            creatureColor = (int(55), int(s*55), int(s*255))
+
+            if creature.canMutate:
+                color = commCreatureColor
+            else:
+                color = muteCreatureColor
+            creatureColor = [int(s * color[i]) for i in range(len(color))]
             creatureDrawing = shapes.Circle(size * (creature.x+0.5), size * (creature.y+0.5), 0.5*size, color=creatureColor, batch=batch)
 
             creatureDrawings.append(creatureDrawing)
@@ -322,6 +368,25 @@ class Simulation:
 
 
 
-sim = Simulation(50, 50)
+sim = Simulation(100, 100)
 
 sim.run()
+
+plt.figure()
+
+t = range(len(sim.commCreatureCountLog))
+
+plt.plot(t, sim.commCreatureCountLog, color = "blue", label="comm count")
+plt.plot(t, sim.muteCreatureCountLog, color = "orange", label="mute count")
+
+plt.xlabel("Timesteps")
+plt.ylabel("Creature count")
+
+plt.xlim(0, len(t)-1)
+plt.ylim(0, 1.2 * max(np.amax(sim.commCreatureCountLog), np.amax(sim.muteCreatureCountLog)))
+
+plt.grid(linestyle="--", alpha = 0.5)
+
+plt.legend()
+
+plt.show()
