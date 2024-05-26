@@ -1,10 +1,30 @@
-import matplotlib.colors
+
 #-----Imports-----#
+import matplotlib.colors
 import numpy as np
 import pyglet
 from pyglet import shapes
 import time
-import matplotlib.pyplot as plt
+import math
+
+#-----InternalImports-----#
+from Networks import Network
+from Buttons import Slider
+from Creature import Creature
+from Settings import Settings, Results
+from Saver import save, Log
+from ChunkManager import ChunkManager
+from Parallelizer import runAsync
+
+
+#-----Constants-----#
+
+red = [204, 6, 6]
+green = [6, 204, 13]
+blue = [6, 19, 204]
+black = [0, 0, 0]
+white = [222, 221, 215]
+creatureBlue = [255, 255, 255]
 
 # Randomly generates a 3d vector where elements sum to 1 and el > 0, el < 1
 def generateColor():
@@ -24,184 +44,7 @@ def generateColor():
             return C
 
 
-class Slider:
-
-    def __init__(self, x, y, width, height, color, text):
-
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.color = color
-        self.on = False
-        self.text = text
-
-
-    def draw(self, batch):
-
-        R = 0.5 * self.height
-        Bh = self.height
-        Bw = self.width - self.height
-
-        xC1 = self.x+R
-        xC2 = self.x+R+Bw
-        yC = self.y+R
-
-        #Draw background
-        c1 = shapes.Circle(xC1, yC, R, color=self.color,
-                      batch=batch)
-        b = shapes.Rectangle(self.x+R, self.y, Bw, Bh, color=self.color, batch=batch)
-        c2 = shapes.Circle(xC2, yC, R, color=self.color,
-                      batch=batch)
-
-        xText = self.x + 0.5 * self.width
-        yText = self.y + self.height + 0.5 * self.height
-
-        textDrawing = pyglet.text.Label(self.text, x=xText, y=yText, batch=batch, anchor_x='center', anchor_y='center', color=[0, 0, 0, 255])
-
-        if self.on:
-            xDot = xC2
-        else:
-            xDot = xC1
-
-        cDot = shapes.Circle(xDot, yC, 0.8 * R, color=[0,0,0,255],
-                      batch=batch)
-
-        return [c1, b, c2, cDot, textDrawing]
-
-    def isClicked(self, x, y):
-        return (self.x < x < self.x + self.width and
-                self.y < y < self.y + self.height)
-
-    def onClick(self, sim):
-        self.on = not self.on
-
-class Creature:
-
-    def __init__(self, energy, x, y, id):
-
-        self.energy = energy
-        self.x = x
-        self.y = y
-        self.id = id
-        self.toBeDestroyed = False
-
-    def destroy(self, sim):
-
-        sim.creatureArray[self.x,self.y] = None
-
-        placement = 0
-        for i, creature in enumerate(sim.creatureList):
-            if self.id == creature.id:
-                placement = i
-                break
-
-        del sim.creatureList[placement]
-
-
-    def move(self, xNew, yNew, sim):
-
-        if xNew < 0 or yNew < 0 or xNew >= sim.Lx or yNew >= sim.Ly:
-            return
-
-        if sim.creatureArray[xNew, yNew] != None:
-            return
-
-        sim.creatureArray[self.x, self.y] = None
-
-        self.x = xNew
-        self.y = yNew
-
-        sim.creatureArray[xNew, yNew] = self
-
-    def eat(self, sim):
-
-        if sim.hasFoodArray[self.x, self.y]:
-
-            dE = sim.getFoodEnergy(sim.foodColorArray[self.x, self.y])
-
-            self.energy += dE
-            sim.hasFoodArray[self.x, self.y] = False
-
-
-    def walk(self, sim):
-
-        freeDirections = self.getFreeDirections(sim)
-        if sim.hasFoodArray[self.x, self.y]or len(freeDirections) == 0:
-            return
-
-        r = sim.creatureSmellRange
-        xmin, xmax = max(0, self.x - r), min(sim.Lx-1, self.x + r + 1)
-        ymin, ymax = max(0, self.y - r), min(sim.Ly-1, self.y + r + 1)
-
-        foods = sim.hasFoodArray
-
-        sUp = np.sum(foods[xmin:xmax, self.y+1:ymax])
-        sDown = np.sum(foods[xmin:xmax, ymin:self.y])
-        sRight = np.sum(foods[self.x+1:xmax, ymin:ymax])
-        sLeft = np.sum(foods[xmin:self.x, ymin:ymax])
-
-        foodValues = np.array([sUp, sDown, sRight, sLeft])
-
-        directions = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]])
-        if np.sum(foodValues) == 0:
-            dp = freeDirections[np.random.randint(len(freeDirections))]
-        else:
-            maxDirections = directions[foodValues == np.amax(foodValues)]
-            dp = np.array(maxDirections[np.random.randint(len(maxDirections))])
-
-        self.move(self.x+dp[0], self.y+dp[1], sim)
-
-
-    def replicate(self, sim):
-
-        if self.energy < sim.creatureOffspringEnergy:
-            return
-
-        directions = self.getFreeDirections(sim)
-
-        if len(directions) == 0:
-            return
-
-        direction = directions[np.random.randint(len(directions))]
-
-        xChild, yChild = self.x+direction[0], self.y+direction[1]
-        childEnergy = self.energy / 2
-        sim.addCreature(xChild, yChild, childEnergy)
-        self.energy = childEnergy
-
-    def getFreeDirections(self, sim):
-
-        directions = []
-        if self.x > 0 and sim.creatureArray[self.x-1, self.y] == None:
-            directions.append([-1,0])
-        if self.x < sim.Lx-1 and sim.creatureArray[self.x+1, self.y] == None:
-            directions.append([1,0])
-        if self.y > 0 and sim.creatureArray[self.x, self.y-1] == None:
-            directions.append([0,-1])
-        if self.y < sim.Ly-1 and sim.creatureArray[self.x, self.y+1] == None:
-            directions.append([0,1])
-
-        return directions
-
-    def getOccupiedDirections(self, sim):
-
-        directions = []
-        if self.x > 0 and sim.creatureArray[self.x-1, self.y] != None:
-            directions.append([-1,0])
-        if self.x < sim.Lx-1 and sim.creatureArray[self.x+1, self.y] != None:
-            directions.append([1,0])
-        if self.y > 0 and sim.creatureArray[self.x, self.y-1] != None:
-            directions.append([0,-1])
-        if self.y < sim.Ly-1 and sim.creatureArray[self.x, self.y+1] != None:
-            directions.append([0,1])
-
-        return directions
-
-
-
 class Simulation:
-
 
     def __init__(self, Lx, Ly):
 
@@ -213,26 +56,50 @@ class Simulation:
         self.hasFoodArray = np.full((Lx, Ly), False, dtype=bool)
         self.foodColorArray = np.zeros((Lx, Ly, 3), dtype=float)
 
+        self.t = 0
+
         # CreatureSettings
         self.creatureSpawnChance = 0.05  # Creature spawn chance per tile per tick
         self.creatureInitEnergy = 100
-        self.creatureOffspringEnergy = 200
+        self.creatureOffspringEnergy = 100
         self.creatureDrainEnergy = 1
         self.creatureSmellRange = 3
 
+        TLife = 70
+        Tpoison = 50 * TLife
+
         # FoodSettings
         self.foodSpawnChance = 0.001  # Food spawn chance per tile per tick
-        self.foodInitEnergy = 50
-        self.poisonChangeRate = 0.001
+        self.foodInitEnergy = 30
+        self.poisonChangeRate = (2/3) * np.pi / Tpoison
         self.poisonAngle = 0
-        self.poisonStd = 1
-        self.poisonOffset = 0.3
+        self.poisonStd = 3
+        self.poisonOffset = 0.2
         self.poisonVector = np.zeros(3)
+
+        self.time = time.time()
+        self.dtLog = Log()
+        self.energyEatenLog = Log()
+        self.posEnergyEatenLog = Log()
+        self.negEnergyEatenLog = Log()
+
+        self.tWalkLog = Log()
 
         #VisualSettings
         self.creatureSize = 8
         self.sidebarLength = 300
         self.poisonGraphHeight = 100
+
+        #NetworkSettings
+        self.memorySize = 6
+        self.memoryUpdateRate = 0.1
+        self.mutateStd = 0.05
+        self.mutateP = 0.01
+        self.memoryShareChance = 0.25
+        self.memoryHiddenSizes = [10]
+        self.decisionHiddenSizes = [10]
+
+        self.foodChunkManager = ChunkManager(self.creatureSmellRange, self.creatureSmellRange, self.Lx, self.Ly)
 
         self.idCounter = 0
 
@@ -241,6 +108,8 @@ class Simulation:
         self.setButtons()
 
         self.spawnCreatures()
+
+
 
     def setButtons(self):
 
@@ -251,15 +120,18 @@ class Simulation:
 
         sWidth = 0.3 * L
         sHeight = 0.1 * L
-        text = "Food appearance"
+        text1 = "Food appearance"
+        text2 = "Hide graphics"
         color = [186, 186, 179]
 
-        slider = Slider(xMax + 0.5 * L - 0.5 * sWidth, yMax - 0.5 * backgroundHeight - 0.5 * sHeight, sWidth, sHeight,
-               color, text)
+        self.foodAppearanceSlider = Slider(xMax + 0.25 * L - 0.5 * sWidth, yMax - 0.5 * backgroundHeight - 0.5 * sHeight, sWidth, sHeight,
+               color, text1)
 
-        self.foodAppearanceSlider = slider
+        self.showGraphicsSlider = Slider(xMax + 0.75 * L - 0.5 * sWidth, yMax - 0.5 * backgroundHeight - 0.5 * sHeight, sWidth, sHeight,
+               color, text2)
 
-        self.buttons.append(slider)
+        self.buttons.append(self.foodAppearanceSlider)
+        self.buttons.append(self.showGraphicsSlider)
 
     def getPoisonVector(self):
 
@@ -278,9 +150,9 @@ class Simulation:
         self.getPoisonVector()
 
 
-    def addCreature(self, x, y, energy):
+    def addCreature(self, x, y, energy, gen, network):
 
-        creature = Creature(energy, x, y, self.idCounter)
+        creature = Creature(energy, x, y, network, gen, self.idCounter)
         self.creatureArray[x, y] = creature
         self.creatureList.append(creature)
         self.idCounter += 1
@@ -296,9 +168,12 @@ class Simulation:
 
         for i in filledIndices:
             x, y = emptySpots[0, i], emptySpots[1, i]
-            self.hasFoodArray[x, y] = True
-            self.foodColorArray[x, y] = generateColor()
+            self.addFood(x, y, generateColor())
 
+    def addFood(self, x, y, color):
+        self.hasFoodArray[x, y] = True
+        self.foodColorArray[x, y] = color
+        self.foodChunkManager.add(x, y)
 
     def spawnCreatures(self):
 
@@ -312,7 +187,8 @@ class Simulation:
         for i in filledIndices:
             x, y = emptySpots[0, i], emptySpots[1, i]
 
-            self.addCreature(x, y, self.creatureInitEnergy)
+            network = Network(self.memorySize, self.memoryUpdateRate, self.mutateStd, self.mutateP, self.memoryHiddenSizes, self.decisionHiddenSizes)
+            self.addCreature(x, y, self.creatureInitEnergy, 0, network)
 
     def creatureFeeding(self):
 
@@ -334,15 +210,48 @@ class Simulation:
         for creature in self.creatureList:
             creature.replicate(self)
 
+    def updateLog(self):
+
+        self.energyEatenLog.finish()
+        self.posEnergyEatenLog.finish()
+        self.negEnergyEatenLog.finish()
+
+        newTime = time.time()
+        self.dtLog.add(newTime - self.time)
+        self.dtLog.finish()
+        self.time = newTime
+
     def step(self):
 
-        self.spawnFood()
-
+        t0 = time.time()
         self.creatureWalk()
+        t1 = time.time()
         self.creatureFeeding()
+        t2 = time.time()
         self.creatureEnergyDrain()
+        t3 = time.time()
         self.creatureReplicate()
+        t4 = time.time()
         self.updatePoison()
+        t5 = time.time()
+        self.spawnFood()
+        t6 = time.time()
+
+        dt1, dt2, dt3, dt4, dt5, dt6 = t1-t0,t2-t1,t3-t2,t4-t3,t5-t4, t6-t5
+        T = dt1+dt2+dt3+dt4+dt5+dt6
+
+        self.tWalkLog.add(dt1)
+        self.tWalkLog.finish()
+
+        # if T > 0 and self.t % 300 == 0:
+        #     print(f"walk: {round(dt1,4)}({round(100*dt1/T,1)}%)")
+        #     print(f"feeding: {round(dt2,4)}({round(100*dt2/T, 1)})%")
+        #     print(f"EnergyDrain: {round(dt3,4)}({round(100*dt3/T, 1)})%")
+        #     print(f"Replicate: {round(dt4,4)}({round(100*dt4/T, 1)})%")
+        #     print(f"updatePoison: {round(dt5,4)}({round(100*dt5/T, 1)})%")
+        #     print(f"SpawnFood: {round(dt6, 4)}({round(100 * dt6 / T, 1)})%")
+        #
+        #     print(f"Walk average: {round(self.tWalkLog.pastAverage(300),4)}")
 
         creaturesToDestroy = []
 
@@ -352,6 +261,35 @@ class Simulation:
 
         for creature in creaturesToDestroy:
             creature.destroy(self)
+
+        self.updateLog()
+
+        if self.runningHidden and self.t % 300 == 0:
+            print(f"Simulation progress: {self.t} / {self.totalSteps}")
+
+        # if self.t % 50 == 0:
+        #     gens = [creature.gen for creature in self.creatureList]
+        #     genAvg = np.average(gens)
+        #     genMin = np.amin(gens)
+        #     genMax = np.amax(gens)
+        #     print(f"Average lifetime: {self.t / genAvg}")
+        #     print(f"genAvg: {genAvg}")
+        #     print(f"genMin-genMax: {genMin}-{genMax}")
+
+
+        self.t += 1
+
+
+    def drawFPS(self, batch):
+
+        yMax = self.Ly * self.creatureSize
+
+        fps = 1 / self.dtLog.pastAverage(3)
+
+        text = str(np.round(fps, 2)) + "FPS"
+
+        textDrawing = pyglet.text.Label(text, x=0, y=yMax-15, batch=batch, color=[235, 231, 16, 255])
+        return textDrawing
 
 
     def drawFood(self, batch):
@@ -391,15 +329,12 @@ class Simulation:
                     foodDrawing = shapes.Rectangle(size * x, size * y, size, size, color=color, batch=batch)
                     foodDrawings.append(foodDrawing)
 
-
-
-
         return foodDrawings
 
     def drawCreatures(self, batch):
 
         creatureDrawings = []
-        color = [55,55,255]
+        color = creatureBlue
         size = self.creatureSize
 
         for creature in self.creatureList:
@@ -417,7 +352,6 @@ class Simulation:
 
         xMax = self.Lx * self.creatureSize
         yMax = self.Ly * self.creatureSize
-        white = [222, 221, 215]
         L = self.sidebarLength
         background = shapes.Rectangle(xMax, 0, L, yMax, color=white, batch=batch)
         return background
@@ -429,10 +363,6 @@ class Simulation:
         yMax = self.Ly * self.creatureSize
         L = self.sidebarLength
 
-        red = [204,6,6]
-        green = [6, 204, 13]
-        blue = [6, 19, 204]
-        black = [0, 0, 0]
         barColors = [red, green, blue]
 
         pMax = max(0, 3 * (self.poisonStd**2) + self.poisonOffset)
@@ -469,17 +399,72 @@ class Simulation:
 
         return barDrawings
 
+    def drawEatingGraph(self, batch):
+
+        L = self.sidebarLength
+        xMax = self.Lx * self.creatureSize
+        yMax = self.Ly * self.creatureSize - 2 * L
+
+        colors = [red, green]
+
+        window = 150
+
+        pPos = self.posEnergyEatenLog.pastAverage(window)#np.average(self.posEnergyEatenLog[nMin:n])
+        pNeg = self.negEnergyEatenLog.pastAverage(window)
+        pList = [pNeg, pPos]
+
+        xMid = xMax + 0.5 * L
+        yMid = yMax - 0.5 * L
+        barWidth = 0.2 * L
+        gapWidth = 0.1 * L
+        barMaxHeight = 0.4 * L
+        dividerHeight = 0.004 * L
+        yText = yMid + 0.4 * L
+        yTitle = yMid - 0.06 * L
+
+        titles = ["p(eat|dE<0)", "p(eat|dE>0)"]
+
+        barDrawings = []
+
+        for i in range(2):
+            color = colors[i]
+
+            xBar = xMid + (i - 0.5) * (barWidth + gapWidth) - 0.5 * barWidth
+
+            barHeight = barMaxHeight * pList[i]
+
+            barDrawing = shapes.Rectangle(xBar, yMid, barWidth, barHeight, color=color, batch=batch)
+            dividerDrawing = shapes.Rectangle(xBar, yMid- 0.5 * dividerHeight, barWidth, dividerHeight, color=black, batch=batch)
+
+            xText = xBar + 0.5 * barWidth
+            text = str(np.round(pList[i],2))
+            textDrawing = pyglet.text.Label(text, x=xText, y=yText, batch=batch, anchor_x='center', color=[0,0,0,255])
+            titleDrawing = pyglet.text.Label(titles[i], x=xText, y=yTitle, batch=batch, anchor_x='center',
+                                            color=[0, 0, 0, 255])
+
+            barDrawings.append(barDrawing)
+            barDrawings.append(dividerDrawing)
+            barDrawings.append(textDrawing)
+            barDrawings.append(titleDrawing)
+
+        return barDrawings
+
+
     def draw(self):
 
         self.window.clear()
 
         batch = pyglet.graphics.Batch()
 
-        foodDrawings = self.drawFood(batch)
+        if not self.showGraphicsSlider.on:
+            foodDrawings = self.drawFood(batch)
+            creatureDrawings = self.drawCreatures(batch)
+
+
         sidebar = self.drawSidebar(batch)
-        creatureDrawings = self.drawCreatures(batch)
         poisonGraphDrawings = self.drawPoisonGraph(batch)
-        #settingDrawings = self.drawVisualSettings(batch)
+        eatingGraphsDrawings = self.drawEatingGraph(batch)
+        fps = self.drawFPS(batch)
 
         buttonDrawings = []
         for button in self.buttons:
@@ -487,34 +472,79 @@ class Simulation:
 
         batch.draw()
 
-    def run(self, drawGame=True):
+    def run(self):
 
-        if (drawGame):
+        self.runningHidden = False
+        self.window = pyglet.window.Window(self.Lx * self.creatureSize + self.sidebarLength, self.Ly * self.creatureSize)
 
-            self.window = pyglet.window.Window(self.Lx * self.creatureSize + self.sidebarLength, self.Ly * self.creatureSize)
+        @self.window.event
+        def on_draw():
 
-            @self.window.event
-            def on_draw():
+            self.step()
+            self.draw()
 
-                self.step()
-                self.draw()
+        @self.window.event
+        def on_mouse_press(x, y, key, modifiers):
+            if key == pyglet.window.mouse.LEFT:
 
-            @self.window.event
-            def on_mouse_press(x, y, key, modifiers):
-                if key == pyglet.window.mouse.LEFT:
+                for button in self.buttons:
+                    if button.isClicked(x, y):
+                        button.onClick(self)
 
-                    for button in self.buttons:
-                        if button.isClicked(x, y):
-                            button.onClick(self)
+        pyglet.app.run()
 
-            pyglet.app.run()
+        self.window.close()
 
-        if (drawGame):
-            self.window.close()
+    def runHidden(self, steps):
+
+        self.runningHidden = True
+        self.totalSteps = steps
+        self.settings = Settings(self)
+
+        for _ in range(steps):
+            self.step()
+
+        results = Results(self)
+
+        return self.settings, results
+
+        #save(self.settings, results)
 
 
 
-sim = Simulation(100, 100)
+# def runSimHidden(Lx, Ly, steps):
+#     sim = Simulation(Lx, Ly)
+#     return sim.runHidden(steps)
 
-sim.run()
+def runSimHidden(id):
+    sim = Simulation(100, 100)
+    return sim.runHidden(50000)
+
+def runSim(Lx, Ly):
+    sim = Simulation(Lx, Ly)
+    sim.run()
+
+
+if __name__ == "__main__":
+
+    # runSim(100, 100)
+
+
+    settingsList, resultsList = runAsync(runSimHidden, 20)
+
+    for i in range(len(settingsList)):
+        settings, results = settingsList[i], resultsList[i]
+        save(settings, results)
+
+
+
+
+
+
+
+
+
+
+
+
 
