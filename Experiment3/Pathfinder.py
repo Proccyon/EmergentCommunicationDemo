@@ -4,13 +4,13 @@ import numpy as np
 
 class Pathfinder:
 
-    def __init__(self, sim, x0, y0):
-        self.sim = sim
-        self.Lx, self.Ly = sim.Lx, sim.Ly
+    def __init__(self, map, x0, y0):
+        self.map = map
+        self.Lx, self.Ly = map.Lx, map.Ly
         self.x0, self.y0 = x0, y0
 
-        self.distanceArray = np.full((sim.Lx, sim.Ly), 999, dtype=np.uint16)
-        self.directionArray = np.empty((sim.Lx, sim.Ly), dtype=list)
+        self.distanceArray = np.full((map.Lx, map.Ly), 999, dtype=np.uint16)
+        self.directionArray = np.empty((map.Lx, map.Ly), dtype=list)
         self.directionDict = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
         self.setupDirectionArray()
 
@@ -50,13 +50,11 @@ class Pathfinder:
 
         return prev
 
-
     def getDistance(self, x, y):
         return self.distanceArray[x, y]
 
-
     def isValidPosition(self, x, y):
-        return x >= 0 and y >= 0 and x < self.Lx and y < self.Ly and not self.sim.hasWallArray[x, y]
+        return x >= 0 and y >= 0 and x < self.Lx and y < self.Ly and not self.map.hasWallArray[x, y]
 
     # Updates the distance and direction of a single position and returns nearby positions needing updates
     def updateTile(self, x, y, distance):

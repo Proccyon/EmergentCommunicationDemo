@@ -28,8 +28,10 @@ class ExploreNode(TaskNode):
 
     def act(self, sim, agent):
 
+        pathfinder = sim.getPathfinder(sim.colonyX, sim.colonyY)
+
         # Find possible next positions we can move to so we move away from the colony
-        next = sim.pathfinder.getPrev(agent.x, agent.y)
+        next = pathfinder.getPrev(agent.x, agent.y)
 
         # If no next positions exists, e.g. if we are next to a wall, task is finished
         if len(next) == 0:
@@ -52,8 +54,10 @@ class ReturnHomeNode(TaskNode):
 
     def act(self, sim, agent):
 
+        pathfinder = sim.getPathfinder(sim.colonyX, sim.colonyY)
+
         # Find possible next positions we can move to so we move towards the colony
-        next = sim.pathfinder.getNext(agent.x, agent.y)
+        next = pathfinder.getNext(agent.x, agent.y)
 
         # If no next positions exists, either we are home or are stuck
         if len(next) == 0:
@@ -118,7 +122,8 @@ class GatherNode(TaskNode):
 
             minDistance = 999
             minPathfinder = None
-            for pathfinder in sim.foodPathfinderList:
+            for x, y in sim.foodPosList:
+                pathfinder = sim.getPathfinder(x, y)
 
                 distance = pathfinder.getDistance(agent.x, agent.y)
                 if distance < minDistance and distance <= sim.smellRange:

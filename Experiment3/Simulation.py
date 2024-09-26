@@ -17,6 +17,7 @@ from Parallelizer import runAsync
 from Pathfinder import Pathfinder, selectRandomPosition
 from Automata import Automata
 from DrawMethods import draw, drawWalls
+from Map import Map, CircleMap, FourRoomsMap
 
 #-----Constants-----#
 
@@ -29,31 +30,22 @@ creatureBlue = [255, 255, 255]
 brown = [124, 99, 47]
 
 
+class SimSettings:
+
+    def __init__(self):
+        self.smellRange = 5
+
+
 class Simulation:
 
-    def __init__(self, Lx, Ly):
+    def __init__(self, map, automata):
 
-        self.Lx, self.Ly = Lx, Ly
-        self.colonyX = int((self.Lx - 1) / 2)
-        self.colonyY = int((self.Ly - 1) / 2)
-
-        self.creatureCount = 10
-
-        self.creatureArray = np.empty((Lx,Ly), dtype=list)
         self.creatureList = []
-        self.setupCreatureArray()
-
-        self.hasFoodArray = np.full((Lx, Ly), False, dtype=bool)
-        self.foodAmountArray = np.zeros((Lx, Ly), dtype=int)
-        self.foodDensityArray = np.zeros((Lx, Ly), dtype=float)
-
-        self.hasWallArray = np.full((Lx, Ly), True, dtype=bool)
-
-        self.pathfinderArray = np.full((Lx, Ly), None, dtype=Pathfinder)
-
+        self.foodPosList = []
+        self.idCounter = 0
         self.t = 0
-
         self.smellRange = 5
+        self.score = 0
 
         self.time = time.time()
         self.dtLog = Log()
@@ -62,68 +54,40 @@ class Simulation:
         self.creatureSize = 8
         self.sidebarLength = 300
 
-        self.foodChunkManager = ChunkManager(self.smellRange, self.smellRange, self.Lx, self.Ly)
-
-        self.idCounter = 0
+        self.initMap(map)
 
         self.buttons = []
-
-
-        self.foodPathfinderList = []
-
-        self.generateWalls()
-        self.generateFood()
-        self.generateCreatures()
-
-        self.pathfinder = self.addPathfinder(self.colonyX, self.colonyY)
 
         self.batch = pyglet.graphics.Batch()
 
         self.wallDrawings = drawWalls(self, self.batch)
 
-        self.automata = Automata()
-
-        self.score = 0
+        self.automata = automata
 
 
-    def setupCreatureArray(self):
+    def initMap(self, map):
+
+        self.map = map
+        self.colonyX, self.colonyY = map.colonyX, map.colonyY
+        self.creatureCount = map.creatureCount
+        self.Lx, self.Ly = map.Lx, map.Ly
+
+        self.creatureArray = np.empty((self.Lx,self.Ly), dtype=list)
+        self.hasFoodArray = np.full((self.Lx, self.Ly), False, dtype=bool)
+
+        self.hasWallArray = map.hasWallArray.copy()
+        self.foodDensityArray = map.foodDensityArray.copy()
+        self.foodAmountArray = map.foodAmountArray.copy()
 
         for x in range(self.Lx):
             for y in range(self.Ly):
-                self.creatureArray[x,y] = []
+                self.creatureArray[x, y] = []
+                for _ in range(map.creatureAmountArray[x, y]):
+                    self.addCreature(x, y)
 
-    def generateWalls(self):
-
-        R = 35
-        for x in range(int(self.colonyX - R)-1, int(self.colonyX + R) + 2):
-            for y in range(int(self.colonyY - R)-1, int(self.colonyY + R) + 2):
-                if (x - self.colonyX)**2 + (y - self.colonyY)**2 <= R**2:
-                    self.hasWallArray[x,y] = False
-
-    def generateFood(self):
-
-        emptySpots = np.array(np.where(self.hasFoodArray == False))
-        emptySpotCount = len(emptySpots[0, :])
-
-        foodSpawnCount = 100
-
-        filledIndices = np.random.choice(range(emptySpotCount), foodSpawnCount, False)
-
-        for i in filledIndices:
-            x, y = emptySpots[0, i], emptySpots[1, i]
-            density = np.random.randint(1, 5)
-            self.addFood(x, y, 200, density)
-
-    def generateCreatures(self):
-
-        emptySpots = np.array(np.where(self.hasWallArray == False))
-        emptySpotCount = len(emptySpots[0, :])
-
-        filledIndices = np.random.choice(range(emptySpotCount), self.creatureCount, True)
-
-        for i in filledIndices:
-            x, y = emptySpots[0, i], emptySpots[1, i]
-            self.addCreature(x, y)
+                if map.foodAmountArray[x, y] > 0:
+                    self.foodPosList.append((x, y))
+                    self.hasFoodArray[x, y] = True
 
 
     def addCreature(self, x, y):
@@ -133,17 +97,8 @@ class Simulation:
         self.creatureList.append(creature)
         self.idCounter += 1
 
-
-    def addFood(self, x, y, amount, density):
-
-        self.foodAmountArray[x, y] += amount
-        self.foodDensityArray[x, y] = density
-
-        if not self.hasFoodArray[x, y]:
-            self.hasFoodArray[x, y] = True
-            self.foodChunkManager.add(x, y)
-            foodPathfinder = self.addPathfinder(x, y)
-            self.foodPathfinderList.append(foodPathfinder)
+    def getPathfinder(self, x, y):
+        return self.map.pathfinderArray[x, y]
 
     def removeFood(self, x, y, amount):
 
@@ -158,24 +113,14 @@ class Simulation:
             self.hasFoodArray[x, y] = False
 
             index = None
-            for i, pathfinder in enumerate(self.foodPathfinderList):
-                if pathfinder.x0 == x and pathfinder.y0 == y:
+            for i, pos in enumerate(self.foodPosList):
+                xFood, yFood = pos
+                if xFood== x and yFood == y:
                     index = i
                     break
 
             if index is not None:
-                del self.foodPathfinderList[index]
-
-
-    def addPathfinder(self, x, y):
-
-        if self.pathfinderArray[x, y] is not None:
-            return self.pathfinderArray[x, y]
-
-        pathfinder = Pathfinder(self, x, y)
-        self.pathfinderArray[x, y] = pathfinder
-        pathfinder.init()
-        return pathfinder
+                del self.foodPosList[index]
 
 
     def creatureWalk(self):
@@ -198,8 +143,8 @@ class Simulation:
 
         self.updateLog()
 
-        if self.runningHidden and self.t % 300 == 0:
-            print(f"Simulation progress: {self.t} / {self.totalSteps}")
+        # if self.runningHidden and self.t % 300 == 0:
+        #     print(f"Simulation progress: {self.t} / {self.totalSteps}")
 
         self.t += 1
 
@@ -231,16 +176,12 @@ class Simulation:
 
         self.runningHidden = True
         self.totalSteps = steps
-        self.settings = Settings(self)
 
         for _ in range(steps):
             self.step()
 
-        results = Results(self)
+        return self.score
 
-        return self.settings, results
-
-        #save(self.settings, results)
 
 
 
@@ -248,18 +189,22 @@ class Simulation:
 #     sim = Simulation(Lx, Ly)
 #     return sim.runHidden(steps)
 
-def runSimHidden(id):
-    sim = Simulation(100, 100)
-    return sim.runHidden(50000)
+def runSimHidden(id, map, automata, tMax):
+    sim = Simulation(map, automata)
+    return sim.runHidden(tMax)
 
-def runSim(Lx, Ly):
-    sim = Simulation(Lx, Ly)
+def runSim(map, automata):
+    sim = Simulation(map, automata)
     sim.run()
 
 
 if __name__ == "__main__":
 
-    runSim(100, 100)
+    #map = CircleMap(20, 50, 10, (0, 5),34)
+    map = FourRoomsMap(12,6,6,1,15,10,1,2,3,4)
+    automata = Automata().initBaseAutomata()
+    map.init()
+    runSim(map, automata)
 
 
     # settingsList, resultsList = runAsync(runSimHidden, 20)

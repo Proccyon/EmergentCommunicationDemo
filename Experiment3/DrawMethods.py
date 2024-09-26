@@ -6,6 +6,7 @@ from pyglet import shapes
 
 green = [6, 204, 13]
 brown = [124, 99, 47]
+red = [204, 6, 6]
 creatureBlue = [255, 255, 255]
 white = [222, 221, 215]
 
@@ -34,6 +35,9 @@ def drawFoodCollected(sim, batch):
 def drawFood(sim, batch):
 
     size = sim.creatureSize
+    minDensity = np.amin(sim.foodDensityArray)
+    maxDensity = np.amax(sim.foodDensityArray)
+    r, g = np.array(red), np.array(green)
 
     foodDrawings = []
     for x in range(sim.Lx):
@@ -42,7 +46,10 @@ def drawFood(sim, batch):
             if not sim.hasFoodArray[x, y] or sim.hasWallArray[x, y]:
                 continue
 
-            foodDrawing = shapes.Rectangle(size * x, size * y, size, size, color=green, batch=batch)
+            density = sim.foodDensityArray[x, y]
+            color = r + (g - r) * (density - minDensity) / (maxDensity - minDensity)
+            color = [int(c) for c in color]
+            foodDrawing = shapes.Rectangle(size * x, size * y, size, size, color=color, batch=batch)
             foodDrawings.append(foodDrawing)
 
     return foodDrawings

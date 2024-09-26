@@ -17,6 +17,7 @@ class Agent:
 
         self.foodPathfinder = None
         self.waypointPathfinder = None
+        self.targetAgent = None
 
     def move(self, xNew: int, yNew: int, sim):
 
