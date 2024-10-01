@@ -49,6 +49,15 @@ class Agent:
         self.isHoldingFood = False
         self.foodDensity = 0
 
+    def resetTarget(self, sim):
+
+        targetAgent = self.targetAgent
+        if targetAgent is None:
+            return
+
+        distance = sim.getPathfinder(self.x, self.y).distanceArray[targetAgent.x, targetAgent.y]
+        if distance > sim.smellRange:
+            self.targetAgent = None
 
 
 

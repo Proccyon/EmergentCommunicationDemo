@@ -27,6 +27,9 @@ class Condition:
     def copy(self):
         return Condition()
 
+    def size(self) -> int:
+        return 1
+
 
 class Expression:
 
@@ -69,6 +72,9 @@ class BinaryOperator(Condition):
             removeableList.append((self.cond, parent))
 
         return removeableList
+
+    def size(self) -> int:
+        return 1 + self.cond.size() + self.cond2.size()
 
 
 class AND(BinaryOperator):
@@ -123,6 +129,9 @@ class NOT(Condition):
 
     def copy(self):
         return NOT(self.cond.copy())
+
+    def size(self) -> int:
+        return 1 + self.cond.size()
 
 
 class Addition(Expression):
@@ -200,6 +209,12 @@ class DynamicValue(Expression):
     def sense(self, sim, agent) -> int:
         return 0
 
+    def toString(self) -> str:
+        return f"{self.target}.{self.varName()}"
+
+    def varName(self) -> str:
+        return ""
+
 
 #---InequalityBase---#
 
@@ -265,19 +280,25 @@ class AtomicBoolean(Condition):
                 return False
         elif self.target == "queried":
             if agent.queriedAgent is not None:
-                return self.sense(sim, agent.queriedAgent )
+                return self.sense(sim, agent.queriedAgent)
             else:
                 return False
 
     def sense(self, sim, agent) -> bool:
         pass
 
+    def toString(self) -> str:
+        return f"{self.target}.{self.varName()}"
+
+    def varName(self) -> str:
+        return ""
+
 class IsHoldingFood(AtomicBoolean):
 
     def sense(self, sim, agent) -> bool:
         return agent.isHoldingFood
 
-    def toString(self) -> str:
+    def varName(self) -> str:
         return "IsHoldingFood"
 
     def copy(self):
@@ -288,7 +309,7 @@ class IsWaypointSet(AtomicBoolean):
     def sense(self, sim, agent) -> bool:
         return agent.waypointPathfinder is not None
 
-    def toString(self) -> str:
+    def varName(self) -> str:
         return "IsWaypointSet"
 
     def copy(self):
@@ -299,7 +320,7 @@ class IsTargetAgentSet(AtomicBoolean):
     def sense(self, sim, agent) -> bool:
         return agent.targetAgent is not None
 
-    def toString(self) -> str:
+    def varName(self) -> str:
         return "TargetAgentSet"
 
     def copy(self):
@@ -319,7 +340,7 @@ class NearbyFoodAmount(DynamicValue):
                 foodCount += 1
         return foodCount
 
-    def toString(self) -> str:
+    def varName(self) -> str:
         return "NearbyFood"
 
     def copy(self):
@@ -330,7 +351,7 @@ class AgentFoodDensity(DynamicValue):
     def sense(self, sim, agent):
         return agent.foodDensity
 
-    def toString(self) -> str:
+    def varName(self) -> str:
         return "AgentFoodDensity"
 
     def copy(self):
@@ -341,40 +362,110 @@ class GroundFoodDensity(DynamicValue):
     def sense(self, sim, agent):
         return sim.foodDensityArray[agent.x, agent.y]
 
-    def toString(self) -> str:
+    def varName(self) -> str:
         return "GroundFoodDensity"
 
     def copy(self):
         return GroundFoodDensity(self.target)
 
+class WaypointFoodDensity(DynamicValue):
+
+    def sense(self, sim, agent):
+        if agent.waypointPathfinder is None:
+            return 0
+
+        x0, y0 = agent.waypointPathfinder.x0, agent.waypointPathfinder.y0
+        return sim.foodDensityArray[x0, y0]
+
+    def varName(self) -> str:
+        return "WaypointFoodDensity"
+
+    def copy(self):
+        return WaypointFoodDensity(self.target)
+
+
+class WaypointDistance(DynamicValue):
+
+    def sense(self, sim, agent):
+        if agent.waypointPathfinder is None:
+            return 999
+
+        return agent.waypointPathfinder.distanceArray[agent.x, agent.y]
+
+    def varName(self) -> str:
+        return "WaypointDistance"
+
+    def copy(self):
+        return WaypointDistance(self.target)
+
+
+class WaypointFoodAmount(DynamicValue):
+
+    def sense(self, sim, agent):
+        if agent.waypointPathfinder is None:
+            return 0
+
+        x0, y0 = agent.waypointPathfinder.x0, agent.waypointPathfinder.y0
+        return sim.foodAmountArray[x0, y0]
+
+    def varName(self) -> str:
+        return "WaypointFoodAmount"
+
+    def copy(self):
+        return WaypointFoodAmount(self.target)
+
 
 #---FactoryList---#
 
-# def getFactoryList():
-#     operatorList = ["AND","OR","!"]
-#     atomList = [NearbyFoodAmountFactory(0, 10)]
-#
-#     return operatorList, atomList
-
-
 def getBooleanFactories():
-    factoryList = []
-    factoryList.append(lambda targetSelf: IsHoldingFood(targetSelf))
-    factoryList.append(lambda targetSelf: IsWaypointSet(targetSelf))
-    factoryList.append(lambda targetSelf: IsTargetAgentSet(targetSelf))
-    return factoryList
+    return [IsHoldingFood, IsWaypointSet, IsTargetAgentSet]
 
 def getValueFactories():
-    factoryList = []
-    factoryList.append(lambda targetSelf: NearbyFoodAmount(targetSelf))
-    factoryList.append(lambda targetSelf: AgentFoodDensity(targetSelf))
-    factoryList.append(lambda targetSelf: GroundFoodDensity(targetSelf))
-    return factoryList
+    return [NearbyFoodAmount, AgentFoodDensity, GroundFoodDensity, WaypointFoodDensity, WaypointFoodAmount, WaypointDistance]
 
 
 
+class OptimizationParameters:
 
+    def __init__(self):
+        self.pNOT = 0.1
+        self.pConst = 0.4
+        self.pTargetSelf = 0.9
+        self.constMin = 0
+        self.constMax = 10
+        self.conditionAmountMutateRate = 0.05
+        self.conditionMutateRate = 0.05
+        self.finEdgeMutationRate = 0.05
+        self.actionMutationRate = 0.05
+        self.actionResetChance = 0.05
+        self.pQueriedValue = 0.5
+        self.elitismChance = 0.1
 
+        self.tMax = 4000
+        self.n = 5
+        self.runs = 10
+
+    def toString(self):
+
+        parameterDict = {"pNot": self.pNOT,
+                         "pConst:": self.pConst,
+                         "pTargetSelf": self.pTargetSelf,
+                         "constMin": self.constMin,
+                         "constMax": self.constMax,
+                         "conditionAmountMutateRate": self.conditionAmountMutateRate,
+                         "conditionMutateRate": self.conditionMutateRate,
+                         "finEdgeMutationRate": self.finEdgeMutationRate,
+                         "actionMutationRate": self.actionMutationRate,
+                         "actionResetChance": self.actionResetChance,
+                         "pQueriedValue": self.pQueriedValue,
+                         "tMax": self.tMax,
+                         "n": self.n,
+                         "runs": self.runs}
+
+        text = ""
+        for name, value in parameterDict.items():
+            text += f"{name} = {value}\n"
+        return text
 
 
 

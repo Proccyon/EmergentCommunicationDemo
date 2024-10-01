@@ -26,7 +26,7 @@ def drawFoodCollected(sim, batch):
 
     yMax = sim.Ly * sim.creatureSize
 
-    text = f"Food Collected: {sim.score}"
+    text = f"Food Collected: {sim.score}\nt: {sim.t}"
 
     textDrawing = pyglet.text.Label(text, x=0, y=yMax - 70, batch=batch, color=white+[255], font_size=20)
     return textDrawing
@@ -76,7 +76,7 @@ def drawCreatures(sim, batch):
     creatureDrawings = []
     size = sim.creatureSize
 
-    for creature in sim.creatureList:
+    for creature in sim.agentList:
 
         if creature.isHoldingFood:
             color = [int(0.75 * creatureBlue[i] + 0.25 * green[i]) for i in range(len(creatureBlue))]

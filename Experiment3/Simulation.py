@@ -13,11 +13,10 @@ from Agent import Agent
 from Settings import Settings, Results
 from Saver import save, Log
 from ChunkManager import ChunkManager
-from Parallelizer import runAsync
-from Pathfinder import Pathfinder, selectRandomPosition
 from Automata import Automata
 from DrawMethods import draw, drawWalls
 from Map import Map, CircleMap, FourRoomsMap
+from Plotter import readResults
 
 #-----Constants-----#
 
@@ -35,12 +34,11 @@ class SimSettings:
     def __init__(self):
         self.smellRange = 5
 
-
 class Simulation:
 
     def __init__(self, map, automata):
 
-        self.creatureList = []
+        self.agentList = []
         self.foodPosList = []
         self.idCounter = 0
         self.t = 0
@@ -94,7 +92,7 @@ class Simulation:
 
         creature = Agent(x, y, self.idCounter)
         self.creatureArray[x, y].append(creature)
-        self.creatureList.append(creature)
+        self.agentList.append(creature)
         self.idCounter += 1
 
     def getPathfinder(self, x, y):
@@ -123,11 +121,10 @@ class Simulation:
                 del self.foodPosList[index]
 
 
-    def creatureWalk(self):
+    def agentWalk(self):
 
-        for creature in self.creatureList:
-            creature.walk(self)
-
+        for agent in self.agentList:
+            agent.walk(self)
 
     def updateLog(self):
 
@@ -138,8 +135,9 @@ class Simulation:
 
     def step(self):
 
-        for creature in self.creatureList:
-            self.automata.run(self, creature)
+        for agent in self.agentList:
+            agent.resetTarget(self)
+            self.automata.run(self, agent)
 
         self.updateLog()
 
@@ -191,7 +189,7 @@ class Simulation:
 
 def runSimHidden(id, map, automata, tMax):
     sim = Simulation(map, automata)
-    return sim.runHidden(tMax)
+    return id, sim.runHidden(tMax)
 
 def runSim(map, automata):
     sim = Simulation(map, automata)
@@ -200,18 +198,30 @@ def runSim(map, automata):
 
 if __name__ == "__main__":
 
+
+    settingsArray, resultsArray = readResults()
+    results = resultsArray[3][0]
+
+    i = len(results.scoreArray)-1
+    jMax = np.argmax(results.scoreArray[i, :])
+    bestAutomata = results.automataArray[i, jMax]
+
     #map = CircleMap(20, 50, 10, (0, 5),34)
-    map = FourRoomsMap(12,6,6,1,15,10,1,2,3,4)
+    map = FourRoomsMap(12, 6, 6, 1, 15, 10, 1, 2, 3, 4)
     automata = Automata().initBaseAutomata()
     map.init()
-    runSim(map, automata)
+    #runSim(map, automata)
+
+    pathfinder = map.pathfinderArray[map.colonyX, map.colonyY]
+
+    # plt.imshow(pathfinder.weightArray)
+    # plt.show()
+
+    pathfinder.test(map.colonyX, map.colonyY)
+    plt.imshow(pathfinder.pathArray)
+    plt.show()
 
 
-    # settingsList, resultsList = runAsync(runSimHidden, 20)
-    #
-    # for i in range(len(settingsList)):
-    #     settings, results = settingsList[i], resultsList[i]
-    #     save(settings, results)
 
 
 

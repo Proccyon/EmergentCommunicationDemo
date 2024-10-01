@@ -17,14 +17,15 @@ class Map:
         self.creatureAmountArray = np.zeros((Lx, Ly), dtype=int)
 
         self.pathfinderArray = np.full((Lx, Ly), None, dtype=Pathfinder)
+        self.name = ""
 
     def setupPathfinderArray(self):
 
         size = self.Lx * self.Ly
-        i=0
+        i = 0
         for x in range(self.Lx):
             for y in range(self.Ly):
-                i+=1
+                i += 1
                 if self.hasWallArray[x, y]:
                     continue
 
@@ -32,8 +33,8 @@ class Map:
                 pathfinder.init()
                 self.pathfinderArray[x, y] = pathfinder
 
-                if i % 100 == 0:
-                    print(f"{i}/{size}")
+                # if i % 100 == 0:
+                #     print(f"{i}/{size}")
 
     def init(self):
         print("Generating map...")
@@ -61,6 +62,9 @@ class Map:
                     self.foodAmountArray[x, y] = foodAmount
                     self.foodDensityArray[x, y] = foodDensity
 
+    def toString(self):
+        return ""
+
 class CircleMap(Map):
 
     def __init__(self, r, R, creatureCount, foodDensityRange, foodAmount):
@@ -71,6 +75,7 @@ class CircleMap(Map):
         self.r, self.R = r, R
         self.foodDensityRange = foodDensityRange
         self.foodAmount = foodAmount
+        self.name = "CircleMap"
 
     def generate(self):
 
@@ -97,6 +102,16 @@ class CircleMap(Map):
     def generateCreatures(self):
         self.creatureAmountArray[self.colonyX, self.colonyY] = self.creatureCount
 
+    def toString(self):
+
+        return (f"{self.name}(\n"
+                f"creature Count = {self.creatureCount}\n"
+                f"r = {self.r}\n"
+                f"R = {self.R}\n"
+                f"foodDensityRange = {self.foodDensityRange}\n"
+                f"foodAmount = {self.foodAmount}\n"
+                f")")
+
 class FourRoomsMap(Map):
 
     def __init__(self, r1, r2, d, w, creatureCount, foodAmount, f1, f2, f3, f4):
@@ -107,6 +122,7 @@ class FourRoomsMap(Map):
         self.r1, self.r2, self.d, self.w = r1, r2, d, w
         self.f1, self.f2, self.f3, self.f4 = f1, f2, f3, f4
         self.foodAmount = foodAmount
+        self.name = "FourRooms"
 
     def generate(self):
 
@@ -144,3 +160,26 @@ class FourRoomsMap(Map):
 
     def generateCreatures(self):
         self.creatureAmountArray[self.colonyX, self.colonyY] = self.creatureCount
+
+    def toString(self):
+
+        return (f"{self.name}(\n"
+                f"creature Count = {self.creatureCount}\n"
+                f"r1 = {self.r1}\n"
+                f"r2 = {self.r2}\n"
+                f"d = {self.d}\n"
+                f"w = {self.w}\n"
+                f"foodAmount = {self.foodAmount}\n"
+                f"f1 = {self.f1}\n"
+                f"f2 = {self.f2}\n"
+                f"f3 = {self.f3}\n"
+                f"f4 = {self.f4}\n"
+                f")")
+
+
+
+
+
+
+
+

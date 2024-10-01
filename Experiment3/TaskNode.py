@@ -1,7 +1,6 @@
 
 #-----Imports-----#
 import numpy as np
-from Pathfinder import Pathfinder, selectRandomPosition
 
 
 #---Base---#
@@ -38,7 +37,8 @@ class ExploreNode(TaskNode):
             return True
 
         # Select random position to move to from possible positions
-        x, y = selectRandomPosition(sim, agent.x, agent.y, next)
+        #x, y = selectRandomPosition(sim, agent.x, agent.y, next)
+        x, y = pathfinder.selectRandomPosition(next)
 
         #Move to new position
         agent.move(x, y, sim)
@@ -68,7 +68,7 @@ class ReturnHomeNode(TaskNode):
             return True
 
         # Select random position to move to from possible positions
-        x, y = selectRandomPosition(sim, agent.x, agent.y, next)
+        x, y = pathfinder.selectRandomPosition(next)
 
         # Move to new position
         agent.move(x, y, sim)
@@ -98,7 +98,7 @@ class GoToWaypoint(TaskNode):
             return True
 
         # Select random position to move to from possible positions
-        x, y = selectRandomPosition(sim, agent.x, agent.y, next)
+        x, y = pathfinder.selectRandomPosition(next)
 
         # Move to new position
         agent.move(x, y, sim)
@@ -150,6 +150,7 @@ class GatherNode(TaskNode):
         agent.move(x, y, sim)
 
         return False
+
 
 
 def initNodes():

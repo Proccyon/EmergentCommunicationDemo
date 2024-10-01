@@ -51,11 +51,11 @@ def save(settings, results):
             return saveNewDir(path, settings, results)
 
         # Load settings of currently examined folder
-        with open(path + "/pickledSettings.obj", 'rb') as settingsFile:
-            folderSettings = pickle.load(settingsFile)
+        with open(path + "/Settings.txt", 'r') as settingsFile:
+            folderSettings = settingsFile.read()
 
         # If settings are same as our settings save results there
-        if folderSettings == settings:
+        if folderSettings == settings.toString():
             return saveOldDir(path, results)
 
         #Else check the next folder
@@ -68,8 +68,8 @@ def saveNewDir(path, settings, results):
 
     os.makedirs(path)
 
-    with open(path + "/pickledSettings.obj", 'wb') as settingsFile:
-        pickle.dump(settings, settingsFile)
+    with open(path + "/Settings.txt", 'w') as settingsFile:
+        settingsFile.write(settings.toString())
 
     saveRun(path+"/Run1", results)
 

@@ -4,7 +4,8 @@ import numpy as np
 
 import Conditions
 from Conditions import Condition, GreaterThan, Constant, getBooleanFactories, getValueFactories, NOT, AND, OR
-from Optimizer import OptimizationParameters
+from Conditions import OptimizationParameters
+import Actions
 
 def generateRandomCondition(op: OptimizationParameters):
 
@@ -13,7 +14,7 @@ def generateRandomCondition(op: OptimizationParameters):
 
     # Randomly decide if we want to use one of the atomic booleans as extra condition
     if np.random.random() < pBool:
-        return generateRandomBoolean(op.pTargetSelf)
+        return generateRandomBoolean(op)
     else:
         # If not we use an inequality
         # First decide if the inequality contains a constant
@@ -21,7 +22,7 @@ def generateRandomCondition(op: OptimizationParameters):
 
             constValue = np.random.randint(op.constMin, op.constMax)
             constant = Constant(constValue)
-            value = generateRandomValue(op.pTargetSelf)
+            value = generateRandomValue(op)
 
             if np.random.random() < 0.5:
                 leftValue = constant
@@ -30,15 +31,30 @@ def generateRandomCondition(op: OptimizationParameters):
                 leftValue = value
                 rightValue = constant
         else:
-
-            i1, i2 = np.random.choice(len(valueFactories), size=2, replace=False)
-            leftValue, rightValue = valueFactories[i1](), valueFactories[i2]()
+            leftValue, rightValue = generateRandomValue(op), generateRandomValue(op)
 
         return GreaterThan(leftValue, rightValue)
+
+def mutateCondition(condition: Condition, op: OptimizationParameters):
+
+    mutations = np.random.poisson(op.conditionMutateRate) - np.random.poisson(op.conditionMutateRate)
+
+    if mutations > 0:
+        for _ in range(mutations):
+            condition = ExpandCondition(condition, op)
+    elif mutations < 0:
+        for _ in range(-mutations):
+            condition = reduceCondition(condition)
+
+    return condition
+
 
 
 # Increase the size of the condition by 1 by randomly adding an operator
 def ExpandCondition(condition: Condition, op: OptimizationParameters):
+
+    if condition == None:
+        return generateRandomCondition(op)
 
     # Randomly select where to mutate
     descendants = condition.getDescendants()
@@ -50,7 +66,7 @@ def ExpandCondition(condition: Condition, op: OptimizationParameters):
     else:
 
         #Generate a random atomic condition
-        newCond = generateRandomCondition()
+        newCond = generateRandomCondition(op)
 
         # Decide whether to use AND or OR
         if np.random.random() < 0.5:
@@ -73,6 +89,9 @@ def ExpandCondition(condition: Condition, op: OptimizationParameters):
 # Reduce the size of the condition by 1 by randomly removing an operator
 def reduceCondition(condition: Condition):
 
+    if condition is None:
+        return None
+
     # Find random leaf to remove
     removeables = condition.getRemoveables()
 
@@ -93,18 +112,44 @@ def reduceCondition(condition: Condition):
     return condition
 
 
-def generateRandomBoolean(op: OptimizationParameters):
+def generateRandomBoolean(op: OptimizationParameters, isQueried: bool=False):
     booleanFactories = Conditions.getBooleanFactories()
-    if np.random.random() < op.pTargetSelf:
+    if isQueried and np.random.random() < op.pQueriedValue:
+        target = "queried"
+    elif np.random.random() < op.pTargetSelf:
         target = "self"
     else:
         target = "saved"
     return booleanFactories[np.random.randint(len(booleanFactories))](target)
 
-def generateRandomValue(op: OptimizationParameters):
+def generateRandomValue(op: OptimizationParameters, isQueried: bool=False):
     valueFactories = Conditions.getValueFactories()
-    if np.random.random() < op.pTargetSelf:
+    if isQueried and np.random.random() < op.pQueriedValue:
+        target = "queried"
+    elif np.random.random() < op.pTargetSelf:
         target = "self"
     else:
         target = "saved"
     return valueFactories[np.random.randint(len(valueFactories))](target)
+
+def generateRandomAction(op: OptimizationParameters):
+    actionFactories = Actions.getActionFactories()
+    return np.random.choice(actionFactories)()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

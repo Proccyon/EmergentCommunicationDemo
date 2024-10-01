@@ -1,11 +1,11 @@
 
 #-----Imports-----#
 import concurrent.futures
-
+import numpy as np
 
 def runAsync(func, nRuns, args=[]):
 
-    resultsList = []
+    resultsList = np.empty(nRuns)
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
 
@@ -13,8 +13,8 @@ def runAsync(func, nRuns, args=[]):
 
         for future in concurrent.futures.as_completed(futures):
             try:
-                 results = future.result()
-                 resultsList.append(results)
+                 i, results = future.result()
+                 resultsList[i] = results
 
             except Exception as exc:
                 print(f"Simulation generated an exception: {exc}")
