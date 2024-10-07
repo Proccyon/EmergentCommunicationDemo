@@ -15,34 +15,31 @@ from Saver import save, Log
 from ChunkManager import ChunkManager
 from Automata import Automata
 from DrawMethods import draw, drawWalls
-from Map import Map, CircleMap, FourRoomsMap
-from Plotter import readResults
-
-#-----Constants-----#
-
-red = [204, 6, 6]
-green = [6, 204, 13]
-blue = [6, 19, 204]
-black = [0, 0, 0]
-white = [222, 221, 215]
-creatureBlue = [255, 255, 255]
-brown = [124, 99, 47]
+from Map import Map, CircleMap, FourRoomsMap, FourRoomsMapSettings
+#from Plotter import readResults
 
 
 class SimSettings:
 
-    def __init__(self):
-        self.smellRange = 5
+    def __init__(self, smellRange, commRange):
+        self.smellRange = smellRange
+        self.commRange = commRange
+
+    def toString(self):
+        return (f"smellRange = {self.smellRange}"
+                f"commRange = {self.commRange}")
 
 class Simulation:
 
-    def __init__(self, map, automata):
+    def __init__(self, map, automata, simSettings):
+
+        self.smellRange = simSettings.smellRange
+        self.commRange = simSettings.commRange
 
         self.agentList = []
         self.foodPosList = []
         self.idCounter = 0
         self.t = 0
-        self.smellRange = 5
         self.score = 0
 
         self.time = time.time()
@@ -77,6 +74,8 @@ class Simulation:
         self.foodDensityArray = map.foodDensityArray.copy()
         self.foodAmountArray = map.foodAmountArray.copy()
 
+        self.foodChunkManager = ChunkManager(self.smellRange, self.smellRange, self.Lx, self.Ly)
+
         for x in range(self.Lx):
             for y in range(self.Ly):
                 self.creatureArray[x, y] = []
@@ -86,6 +85,7 @@ class Simulation:
                 if map.foodAmountArray[x, y] > 0:
                     self.foodPosList.append((x, y))
                     self.hasFoodArray[x, y] = True
+                    self.foodChunkManager.add(x, y)
 
 
     def addCreature(self, x, y):
@@ -98,6 +98,9 @@ class Simulation:
     def getPathfinder(self, x, y):
         return self.map.pathfinderArray[x, y]
 
+    def isValidPosition(self, x, y):
+        return x >= 0 and y >= 0 and x < self.Lx and y < self.Ly and not self.hasWallArray[x, y]
+
     def removeFood(self, x, y, amount):
 
         if not self.hasFoodArray[x, y]:
@@ -109,11 +112,12 @@ class Simulation:
             self.foodAmountArray[x, y] = 0
             self.foodDensityArray[x, y] = 0
             self.hasFoodArray[x, y] = False
+            self.foodChunkManager.remove(x, y)
 
             index = None
             for i, pos in enumerate(self.foodPosList):
                 xFood, yFood = pos
-                if xFood== x and yFood == y:
+                if xFood == x and yFood == y:
                     index = i
                     break
 
@@ -181,45 +185,35 @@ class Simulation:
         return self.score
 
 
-
-
-# def runSimHidden(Lx, Ly, steps):
-#     sim = Simulation(Lx, Ly)
-#     return sim.runHidden(steps)
-
-def runSimHidden(id, map, automata, tMax):
-    sim = Simulation(map, automata)
+def runSimHidden(id, map, automata, simSettings, tMax):
+    sim = Simulation(map, automata, simSettings)
     return id, sim.runHidden(tMax)
 
-def runSim(map, automata):
-    sim = Simulation(map, automata)
+def runSim(map, automata, simSettings):
+    sim = Simulation(map, automata, simSettings)
     sim.run()
 
 
 if __name__ == "__main__":
 
 
-    settingsArray, resultsArray = readResults()
-    results = resultsArray[3][0]
+    # settingsArray, resultsArray = readResults()
+    # results = resultsArray[3][0]
+    #
+    # i = len(results.scoreArray)-1
+    # jMax = np.argmax(results.scoreArray[i, :])
+    # bestAutomata = results.automataArray[i, jMax]
 
-    i = len(results.scoreArray)-1
-    jMax = np.argmax(results.scoreArray[i, :])
-    bestAutomata = results.automataArray[i, jMax]
+    automata = Automata().initCommunicatingAutomata()
 
-    #map = CircleMap(20, 50, 10, (0, 5),34)
-    map = FourRoomsMap(12, 6, 6, 1, 15, 10, 1, 2, 3, 4)
-    automata = Automata().initBaseAutomata()
+    simSettings = SimSettings(5, 15)
+    mapSettings = FourRoomsMapSettings(12, 6, 6, 1, 30, 10, 1, 2, 3, 4)
+    map = FourRoomsMap(mapSettings)
     map.init()
-    #runSim(map, automata)
+    runSim(map, automata, simSettings)
 
-    pathfinder = map.pathfinderArray[map.colonyX, map.colonyY]
 
-    # plt.imshow(pathfinder.weightArray)
-    # plt.show()
 
-    pathfinder.test(map.colonyX, map.colonyY)
-    plt.imshow(pathfinder.pathArray)
-    plt.show()
 
 
 

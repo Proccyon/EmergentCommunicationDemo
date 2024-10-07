@@ -36,25 +36,25 @@ class ChunkManager():
     def add(self, x, y):
         xi, yi = self.hash(x, y)
 
-        self.chunks[xi, yi][str(x)+str(y)] = [x,y]
+        self.chunks[xi, yi][str(x)+"|"+str(y)] = [x, y]
 
         xmin, ymin = max(0, xi-1), max(0, yi-1)
         xmax, ymax = min(self.Nx-1,xi+1), min(self.Ny-1,y+1)
 
         for xii in range(xmin, xmax+1):
             for yii in range(ymin, ymax+1):
-                self.neighbourChunks[xii, yii][str(x)+str(y)] = [x,y]
+                self.neighbourChunks[xii, yii][str(x)+"|"+str(y)] = [x, y]
 
     def remove(self, x, y):
         xi, yi = self.hash(x, y)
-        del self.chunks[xi, yi][str(x)+str(y)]
+        del self.chunks[xi, yi][str(x)+"|"+str(y)]
 
         xmin, ymin = max(0, xi-1), max(0, yi-1)
-        xmax, ymax = min(self.Nx-1,xi+1), min(self.Ny-1,y+1)
+        xmax, ymax = min(self.Nx-1,xi+1), min(self.Ny-1, y+1)
 
         for xii in range(xmin, xmax+1):
             for yii in range(ymin, ymax+1):
-                del self.neighbourChunks[xii, yii][str(x)+str(y)]
+                del self.neighbourChunks[xii, yii][str(x)+"|"+str(y)]
 
     def getNeighbours(self, x, y):
         xi, yi = self.hash(x, y)

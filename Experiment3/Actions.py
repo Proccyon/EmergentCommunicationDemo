@@ -27,7 +27,7 @@ class SetWaypoint(Action):
 
     def __init__(self):
         Action.__init__(self)
-        self.name = "Set waypoint"
+        self.name = "SetWaypoint"
 
     def run(self, sim, agent):
         agent.waypointPathfinder = sim.getPathfinder(agent.x, agent.y)
@@ -40,7 +40,7 @@ class ResetWaypoint(Action):
 
     def __init__(self):
         Action.__init__(self)
-        self.name = "Reset waypoint"
+        self.name = "ResetWaypoint"
 
     def run(self, sim, agent):
         agent.waypointPathfinder = None
@@ -53,7 +53,7 @@ class SelectTargetAgent(Action):
 
     def __init__(self, condition=None):
         Action.__init__(self)
-        self.name = "Select Agent"
+        self.name = "SelectAgent"
         self.condition = condition
 
     def run(self, sim, agent):
@@ -62,14 +62,14 @@ class SelectTargetAgent(Action):
         for queriedAgent in sim.agentList:
             distance = pathfinder.distanceArray[queriedAgent.x, queriedAgent.y]
             agent.queriedAgent = queriedAgent
-            if distance <= sim.smellRange and (self.condition is None or self.condition.evaluate(sim, agent)):
+            if distance <= sim.commRange and (self.condition is None or self.condition.evaluate(sim, agent)):
                 agentList.append(queriedAgent)
 
         if len(agentList) > 0:
             agent.targetAgent = np.random.choice(agentList)
 
     def mutate(self, op: OptimizationParameters):
-        self.condition = mutateCondition(self.condition, op)
+        self.condition = mutateCondition(self.condition, op, True)
 
     def copy(self):
         if self.condition is None:
@@ -82,14 +82,13 @@ class SelectTargetAgent(Action):
         if self.condition is None:
             return self.name
         else:
-            print("yes")
             return f"{self.name}({self.condition.toString()})"
 
 class CopyWaypoint(Action):
 
     def __init__(self):
         Action.__init__(self)
-        self.name = "Copy Waypoint"
+        self.name = "CopyWaypoint"
 
     def run(self, sim, agent):
         if agent.targetAgent is not None:
@@ -100,3 +99,5 @@ class CopyWaypoint(Action):
 
 def getActionFactories():
     return [SetWaypoint, ResetWaypoint, SelectTargetAgent, CopyWaypoint]
+
+

@@ -1,8 +1,8 @@
 
 #-----Imports-----#
 import numpy as np
-from Map import CircleMap, FourRoomsMap
-from Simulation import runSimHidden
+from Map import CircleMap, FourRoomsMap, FourRoomsMapSettings
+from Simulation import runSimHidden, SimSettings
 from Automata import Automata
 from Parallelizer import runAsync
 from Conditions import OptimizationParameters
@@ -12,16 +12,19 @@ from MutationMethods import *
 
 class Settings:
 
-    def __init__(self, map, baseAutomata, op):
-        self.map = map
+    def __init__(self, mapSettings, simSettings, baseAutomata, op):
+        self.mapSettings = mapSettings
+        self.simSettings = simSettings
         self.baseAutomata = baseAutomata
         self.op = op
 
     def toString(self):
         return (f"#---OptimizationParameters---#\n"
                 f"{self.op.toString()}\n"
+                f"#---SimSettings---#\n"
+                f"{self.simSettings.toString()}\n"              
                 f"#---Map---#\n"
-                f"{self.map.toString()}\n"
+                f"{self.mapSettings.toString()}\n"
                 f"#---BaseAutomata---#\n"
                 f"{self.baseAutomata.toString()}")
 
@@ -37,12 +40,12 @@ def TournamentSelection(automataList, scoreList, tournamentSize=3):
     imax = np.argmax([scoreList[ind] for ind in selectedIndices])
     return automataList[selectedIndices[imax]]
 
-def run(i, map, automataList, tMax):
+def run(i, map, simSettings, automataList, tMax):
 
-    score = runSimHidden(i, map, automataList[i], tMax)
+    score = runSimHidden(i, map, automataList[i], simSettings, tMax)
     return score
 
-def optimize(map, baseAutomata, op):
+def optimize(map, simSettings, baseAutomata, op):
     print("Starting simulations...")
 
     scoreArray = np.zeros((op.runs, op.n), dtype=int)
@@ -54,8 +57,10 @@ def optimize(map, baseAutomata, op):
 
     for i in range(op.runs):
 
+        startTime = time.time()
+
         # Run simulations to determine performance of each automata
-        scoreList = runAsync(run, op.n, [map, automataList, op.tMax])
+        scoreList = runAsync(run, op.n, [map, simSettings, automataList, op.tMax])
 
         # Remember best performing automata
         iMax = np.argmax(scoreList)
@@ -80,13 +85,12 @@ def optimize(map, baseAutomata, op):
         automataList = newAutomataList
         avgSize = np.round(np.average([automata.size() for automata in automataList]), 2)
 
-        print(f"Run {i+1}/{op.runs}, minScore={np.amin(scoreList)}, maxScore={np.amax(scoreList)}, avgScore={np.average(scoreList)}, avgSize={avgSize}")
+        dt = int(time.time() - startTime)
+        print(f"Run {i+1}/{op.runs}, minScore={np.amin(scoreList)}, maxScore={np.amax(scoreList)}, avgScore={np.average(scoreList)}, avgSize={avgSize}, time={dt}s")
+
+    return Results(scoreArray, automataArray)
 
 
-    # Save results
-    settings = Settings(map, baseAutomata, op)
-    results = Results(scoreArray, automataArray)
-    save(settings, results)
 
 
 
@@ -94,17 +98,20 @@ if __name__ == "__main__":
 
     op = OptimizationParameters()
     op.tMax = 800
-    op.runs = 100
-    op.n = 100
+    op.runs = 30
+    op.n = 50
     creatureCount = 15
 
-    map = FourRoomsMap(6, 6, 6, 1, creatureCount, 10, 1, 2, 3, 4).init()
+    simSettings = SimSettings(5, 5)
+    mapSettings = FourRoomsMapSettings(6, 6, 6, 1, creatureCount, 10, 1, 2, 4, 8)
+    map = FourRoomsMap(mapSettings).init()
 
     automata = Automata().initBaseAutomata()
 
-    optimize(map, automata, op)
+    results = optimize(map, simSettings, automata, op)
 
-
+    settings = Settings(mapSettings, simSettings, automata, op)
+    save(settings, results, "OptimizationResults")
 
 
 

@@ -37,11 +37,9 @@ class Log:
 # If a simulation was already run and saved with same settings as current
 # -> save sim in same folder
 # Otherwise create new folder
-def save(settings, results):
+def save(settings, results, folderName):
 
-    folderName = "SimResults"
     i = 1
-
     while True:
 
         path = folderName + str(i)
@@ -70,6 +68,9 @@ def saveNewDir(path, settings, results):
 
     with open(path + "/Settings.txt", 'w') as settingsFile:
         settingsFile.write(settings.toString())
+
+    with open(path + "/PickledSettings.obj", 'wb') as settingsFile:
+        pickle.dump(settings, settingsFile)
 
     saveRun(path+"/Run1", results)
 

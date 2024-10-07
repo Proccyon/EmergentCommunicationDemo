@@ -7,14 +7,14 @@ from Conditions import Condition, GreaterThan, Constant, getBooleanFactories, ge
 from Conditions import OptimizationParameters
 import Actions
 
-def generateRandomCondition(op: OptimizationParameters):
+def generateRandomCondition(op: OptimizationParameters, isQueried: bool=False):
 
     booleanFactories, valueFactories = Conditions.getBooleanFactories(), Conditions.getValueFactories()
     pBool = len(booleanFactories) / (len(booleanFactories) + len(valueFactories))
 
     # Randomly decide if we want to use one of the atomic booleans as extra condition
     if np.random.random() < pBool:
-        return generateRandomBoolean(op)
+        return generateRandomBoolean(op, isQueried)
     else:
         # If not we use an inequality
         # First decide if the inequality contains a constant
@@ -22,7 +22,7 @@ def generateRandomCondition(op: OptimizationParameters):
 
             constValue = np.random.randint(op.constMin, op.constMax)
             constant = Constant(constValue)
-            value = generateRandomValue(op)
+            value = generateRandomValue(op, isQueried)
 
             if np.random.random() < 0.5:
                 leftValue = constant
@@ -31,30 +31,28 @@ def generateRandomCondition(op: OptimizationParameters):
                 leftValue = value
                 rightValue = constant
         else:
-            leftValue, rightValue = generateRandomValue(op), generateRandomValue(op)
+            leftValue, rightValue = generateRandomValue(op, isQueried), generateRandomValue(op, isQueried)
 
         return GreaterThan(leftValue, rightValue)
 
-def mutateCondition(condition: Condition, op: OptimizationParameters):
+def mutateCondition(condition: Condition, op: OptimizationParameters, isQueried: bool=False):
 
     mutations = np.random.poisson(op.conditionMutateRate) - np.random.poisson(op.conditionMutateRate)
 
     if mutations > 0:
         for _ in range(mutations):
-            condition = ExpandCondition(condition, op)
+            condition = ExpandCondition(condition, op, isQueried)
     elif mutations < 0:
         for _ in range(-mutations):
             condition = reduceCondition(condition)
 
     return condition
 
-
-
 # Increase the size of the condition by 1 by randomly adding an operator
-def ExpandCondition(condition: Condition, op: OptimizationParameters):
+def ExpandCondition(condition: Condition, op: OptimizationParameters, isQueried: bool=False):
 
     if condition == None:
-        return generateRandomCondition(op)
+        return generateRandomCondition(op, isQueried)
 
     # Randomly select where to mutate
     descendants = condition.getDescendants()
@@ -66,7 +64,7 @@ def ExpandCondition(condition: Condition, op: OptimizationParameters):
     else:
 
         #Generate a random atomic condition
-        newCond = generateRandomCondition(op)
+        newCond = generateRandomCondition(op, isQueried)
 
         # Decide whether to use AND or OR
         if np.random.random() < 0.5:

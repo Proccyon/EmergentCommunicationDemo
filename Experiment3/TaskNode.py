@@ -1,7 +1,7 @@
 
 #-----Imports-----#
 import numpy as np
-
+from Pathfinder import selectRandomPosition
 
 #---Base---#
 
@@ -38,7 +38,7 @@ class ExploreNode(TaskNode):
 
         # Select random position to move to from possible positions
         #x, y = selectRandomPosition(sim, agent.x, agent.y, next)
-        x, y = pathfinder.selectRandomPosition(next)
+        x, y = selectRandomPosition(sim, agent.x, agent.y, next)
 
         #Move to new position
         agent.move(x, y, sim)
@@ -68,7 +68,7 @@ class ReturnHomeNode(TaskNode):
             return True
 
         # Select random position to move to from possible positions
-        x, y = pathfinder.selectRandomPosition(next)
+        x, y = next[np.random.randint(len(next))]
 
         # Move to new position
         agent.move(x, y, sim)
@@ -98,7 +98,7 @@ class GoToWaypoint(TaskNode):
             return True
 
         # Select random position to move to from possible positions
-        x, y = pathfinder.selectRandomPosition(next)
+        x, y = next[np.random.randint(len(next))]
 
         # Move to new position
         agent.move(x, y, sim)
@@ -152,7 +152,38 @@ class GatherNode(TaskNode):
         return False
 
 
+# Node that makes the agent pick up nearby food
+class RandomWalkNode(TaskNode):
+
+    def __init__(self):
+        TaskNode.__init__(self)
+        self.name = "RandomWalk"
+
+    def act(self, sim, agent):
+        newPositions = sim.map.neighbourArray[agent.x, agent.y]
+
+        if len(newPositions) == 0:
+            return True
+
+        xNew, yNew = newPositions[np.random.randint(len(newPositions))]
+        agent.move(xNew, yNew, sim)
+        return False
+
+        # newPositions = []
+        # for dx, dy in [(1, 0), (0, 1), (-1, 0), (0, -1)]:
+        #     xNew, yNew = agent.x + dx, agent.y + dy
+        #     if sim.isValidPosition(xNew, yNew):
+        #         newPositions.append((xNew, yNew))
+        #
+        # if len(newPositions) == 0:
+        #     return True
+        #
+        # xNew, yNew = newPositions[np.random.randint(len(newPositions))]
+        # agent.move(xNew, yNew, sim)
+        #
+        # return False
+
 
 def initNodes():
-    return [ExploreNode(), ReturnHomeNode(), GatherNode(), GoToWaypoint()]
+    return [RandomWalkNode(), ReturnHomeNode(), GatherNode(), GoToWaypoint()]
 

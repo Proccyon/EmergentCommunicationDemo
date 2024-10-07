@@ -3,8 +3,8 @@
 import numpy as np
 from TaskNode import initNodes
 import Conditions
-from Conditions import Condition, AND, OR, NOT, NearbyFoodAmount, GroundFoodDensity, IsWaypointSet, GreaterThan, Constant, OptimizationParameters
-from Actions import Action, SetWaypoint, ResetWaypoint, getActionFactories
+from Conditions import *
+from Actions import *
 from MutationMethods import *
 
 
@@ -29,7 +29,7 @@ class Automata:
 
         return self
 
-    def initAdvancedAutomata(self):
+    def initMemorizingAutomata(self):
 
         self.finishEdgeArray[0] = 1
         self.finishEdgeArray[1] = 0
@@ -37,12 +37,35 @@ class Automata:
         self.finishEdgeArray[3] = 2
 
         self.conditionEdgeArray[0, 2] = GreaterThan(NearbyFoodAmount("self"), Constant(0))
-        self.conditionEdgeArray[2, 2] = GreaterThan(GroundFoodDensity("self"), Constant(2))
+        self.conditionEdgeArray[2, 2] = GreaterThan(GroundFoodDensity("self"), Constant(0))
 
         self.actionArray[2, 2] = SetWaypoint()
 
         self.conditionEdgeArray[0, 3] = IsWaypointSet("self")
         self.finishActionArray[3] = ResetWaypoint()
+
+        return self
+
+    def initCommunicatingAutomata(self):
+
+        self.finishEdgeArray[0] = 1
+        self.finishEdgeArray[1] = 0
+        self.finishEdgeArray[2] = 1
+        self.finishEdgeArray[3] = 2
+
+        self.conditionEdgeArray[0, 0] = OR(NOT(IsHoldingFood("self")), IsHoldingFood("self"))
+        self.conditionEdgeArray[1, 1] = OR(NOT(IsHoldingFood("self")), IsHoldingFood("self"))
+        self.conditionEdgeArray[0, 2] = GreaterThan(NearbyFoodAmount("self"), Constant(0))
+        self.conditionEdgeArray[2, 2] = GreaterThan(GroundFoodDensity("self"), Constant(0))
+        self.conditionEdgeArray[3, 3] = GreaterThan(WaypointFoodDensity("saved"), WaypointFoodDensity("self"))
+
+        self.actionArray[0, 0] = SelectTargetAgent(GreaterThan(WaypointFoodDensity("queried"), WaypointFoodDensity("self")))
+        self.actionArray[1, 1] = SelectTargetAgent(GreaterThan(WaypointFoodDensity("queried"), WaypointFoodDensity("self")))
+        self.actionArray[2, 2] = SetWaypoint()
+        self.actionArray[0, 3] = CopyWaypoint()
+
+        self.conditionEdgeArray[0, 3] = OR(IsWaypointSet("self"), IsTargetAgentSet("self"))
+
 
         return self
 
@@ -218,32 +241,22 @@ class Automata:
             i, j = np.random.choice(self.n, size=2, replace=False)
             self.finishEdgeArray[i] = j
 
-
     def mutateActions(self, op: OptimizationParameters):
 
-        mutations = np.random.poisson(self.n * op.actionMutationRate)
-
-        for _ in range(mutations):
-            i = np.random.randint(self.n)
+        for i in range(self.n):
+            action = self.finishActionArray[i]
+            if action is not None and np.random.random() < op.actionMutationRate:
+                action.mutate(op)
             if np.random.random() < op.actionResetChance:
-                self.finishActionArray[i] = None
-            else:
                 self.finishActionArray[i] = generateRandomAction(op)
 
-        actionSlots = []
         for i in range(self.n):
             for j in range(self.n):
-                if self.conditionEdgeArray[i, j] is not None:
-                    actionSlots.append((i, j))
-
-        mutations = np.random.poisson(len(actionSlots) * op.actionMutationRate)
-        for _ in range(mutations):
-            i,j = actionSlots[np.random.randint(len(actionSlots))]
-            if np.random.random() < op.actionResetChance:
-                self.actionArray[i, j] = None
-            else:
-                self.actionArray[i, j] = generateRandomAction(op)
-
+                action = self.actionArray[i, j]
+                if action is not None and np.random.random() < op.actionMutationRate:
+                    action.mutate(op)
+                if np.random.random() < op.actionResetChance:
+                    self.actionArray[i, j] = generateRandomAction(op)
 
     def size(self) -> int:
 

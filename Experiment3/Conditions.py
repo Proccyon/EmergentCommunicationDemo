@@ -333,11 +333,13 @@ class NearbyFoodAmount(DynamicValue):
     def sense(self, sim, agent):
 
         foodCount = 0
+        #for x, y in sim.foodChunkManager.getNeighbours(agent.x, agent.y):
         for x, y in sim.foodPosList:
             pathfinder = sim.getPathfinder(x, y)
             distance = pathfinder.getDistance(agent.x, agent.y)
             if distance <= sim.smellRange:
                 foodCount += 1
+
         return foodCount
 
     def varName(self) -> str:
@@ -383,7 +385,6 @@ class WaypointFoodDensity(DynamicValue):
     def copy(self):
         return WaypointFoodDensity(self.target)
 
-
 class WaypointDistance(DynamicValue):
 
     def sense(self, sim, agent):
@@ -397,7 +398,6 @@ class WaypointDistance(DynamicValue):
 
     def copy(self):
         return WaypointDistance(self.target)
-
 
 class WaypointFoodAmount(DynamicValue):
 
@@ -414,6 +414,18 @@ class WaypointFoodAmount(DynamicValue):
     def copy(self):
         return WaypointFoodAmount(self.target)
 
+class ColonyDistance(DynamicValue):
+
+    def sense(self, sim, agent):
+        pathfinder = sim.getPathfinder(sim.colonyX, sim.colonyY)
+        return pathfinder.distanceArray[agent.x, agent.y]
+
+    def varName(self) -> str:
+        return "ColonyDistance"
+
+    def copy(self):
+        return ColonyDistance(self.target)
+
 
 #---FactoryList---#
 
@@ -421,14 +433,13 @@ def getBooleanFactories():
     return [IsHoldingFood, IsWaypointSet, IsTargetAgentSet]
 
 def getValueFactories():
-    return [NearbyFoodAmount, AgentFoodDensity, GroundFoodDensity, WaypointFoodDensity, WaypointFoodAmount, WaypointDistance]
-
+    return [NearbyFoodAmount, AgentFoodDensity, GroundFoodDensity, WaypointFoodDensity, WaypointFoodAmount, WaypointDistance, ColonyDistance]
 
 
 class OptimizationParameters:
 
     def __init__(self):
-        self.pNOT = 0.1
+        self.pNOT = 0.15
         self.pConst = 0.4
         self.pTargetSelf = 0.9
         self.constMin = 0
@@ -436,7 +447,7 @@ class OptimizationParameters:
         self.conditionAmountMutateRate = 0.05
         self.conditionMutateRate = 0.05
         self.finEdgeMutationRate = 0.05
-        self.actionMutationRate = 0.05
+        self.actionMutationRate = 1
         self.actionResetChance = 0.05
         self.pQueriedValue = 0.5
         self.elitismChance = 0.1

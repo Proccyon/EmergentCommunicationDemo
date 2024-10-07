@@ -56,7 +56,7 @@ class Agent:
             return
 
         distance = sim.getPathfinder(self.x, self.y).distanceArray[targetAgent.x, targetAgent.y]
-        if distance > sim.smellRange:
+        if distance > sim.commRange:
             self.targetAgent = None
 
 

@@ -3,20 +3,31 @@
 import concurrent.futures
 import numpy as np
 
-def runAsync(func, nRuns, args=[]):
+def runAsync(func, nRuns, args=[], maxSize=50):
 
     resultsList = np.empty(nRuns)
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    runsLeft = nRuns
 
-        futures = [executor.submit(func, i, *args) for i in range(nRuns)]
+    while runsLeft > 0:
 
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                 i, results = future.result()
-                 resultsList[i] = results
+        if runsLeft > maxSize:
+            currentRuns = maxSize
+            runsLeft -= maxSize
+        else:
+            currentRuns = runsLeft
+            runsLeft = 0
 
-            except Exception as exc:
-                print(f"Simulation generated an exception: {exc}")
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+
+            futures = [executor.submit(func, i, *args) for i in range(currentRuns)]
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                     i, results = future.result()
+                     resultsList[i + runsLeft] = results
+
+                except Exception as exc:
+                    print(f"Simulation generated an exception: {exc}")
 
     return resultsList

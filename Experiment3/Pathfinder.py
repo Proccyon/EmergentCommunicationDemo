@@ -76,9 +76,6 @@ class Pathfinder:
             if self.distanceArray[xNew, yNew] == distance - 1:
                 directions.append(ind)
 
-        for xNew, yNew in toUpdate:
-            self.weightArray[xNew, yNew] += 1 / len(toUpdate)
-
         self.distanceArray[x, y] = distance
         self.directionArray[x, y] = directions
         return toUpdate
@@ -126,9 +123,6 @@ class Pathfinder:
                 if endPosition is not None and xNew == xEnd and yNew == yEnd:
                     done = True
 
-            for xNew, yNew in nextUpdating:
-                self.weightArray[xNew, yNew] = 1 / self.weightArray[xNew, yNew]
-
             currentUpdating = nextUpdating
             nextUpdating = set()
             distance += 1
@@ -137,75 +131,15 @@ class Pathfinder:
     def init(self, endPositions=None):
         self.updateFrom(self.x0, self.y0, endPositions)
 
-    def selectRandomPosition(self, positions):
 
-        weights = np.array([self.weightArray[x, y] for x, y in positions])**3
-        weights /= np.sum(weights)
+def selectRandomPosition(sim, x, y, positions):
 
-        ind = np.random.choice(range(len(positions)), p=weights)
-        return positions[ind]
+    d0 = np.sqrt((x-sim.colonyX)**2 + (y-sim.colonyY)**2)
+    weights = [np.abs(np.sqrt((x-sim.colonyX)**2 + (y-sim.colonyY)**2) - d0) for x, y in positions]
+    weights /= np.sum(weights)
 
-
-    # Updates the distance and direction of a single position and returns nearby positions needing updates
-    def test2(self, x, y, distance):
-
-        toUpdate = set()  # Set of neighbouring positions that need updates
-
-        totalWeight = 0
-        for ind, direction in self.directionDict.items():
-            dx, dy = self.directionDict[ind]
-            xNew, yNew = x+dx, y+dy
-            if not self.isValidPosition(xNew, yNew):
-                continue
-
-            if self.distanceArray[xNew, yNew] > distance:
-                toUpdate.add((xNew, yNew))
-                totalWeight += self.weightArray[xNew, yNew]**2
-
-        for xNew, yNew in toUpdate:
-            self.pathArray[xNew, yNew] += self.pathArray[x, y] * self.weightArray[xNew, yNew]**2.1 / totalWeight
-
-        return toUpdate
-
-    def test(self, x, y):
-
-        if not self.isValidPosition(x, y):
-            return
-
-        distance = self.calculateDistance(x, y)
-
-        currentUpdating = {(x, y)}
-        nextUpdating = set()
-        self.pathArray = np.zeros((self.map.Lx, self.map.Ly), dtype=float)
-        self.pathArray[x, y] = 1
-
-        done = False
-        while len(currentUpdating) > 0 and not done:
-            for xNew, yNew in currentUpdating:
-                toUpdate = self.test2(xNew, yNew, distance)
-                nextUpdating = nextUpdating.union(toUpdate)
-
-            total = 0
-            for xNew, yNew in nextUpdating:
-                total += self.pathArray[xNew, yNew]
-
-            for xNew, yNew in nextUpdating:
-                self.pathArray[xNew, yNew] /= total / len(nextUpdating)
-
-            currentUpdating = nextUpdating
-            nextUpdating = set()
-            distance += 1
-
-
-
-# def selectRandomPosition(sim, x, y, positions):
-#
-#     d0 = np.sqrt((x-sim.colonyX)**2 + (y-sim.colonyY)**2)
-#     weights = [np.abs(np.sqrt((x-sim.colonyX)**2 + (y-sim.colonyY)**2) - d0) for x, y in positions]
-#     weights /= np.sum(weights)
-#
-#     ind = np.random.choice(range(len(positions)), p=weights)
-#     return positions[ind]
+    ind = np.random.choice(range(len(positions)), p=weights)
+    return positions[ind]
 
 
 
