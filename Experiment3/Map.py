@@ -135,7 +135,7 @@ class CircleMap(Map):
             if self.hasWallArray[x, y]:
                 continue
 
-            density = np.random.randint(dMin, dMax)
+            density = np.random.randint(dMin, dMax+1)
             self.foodAmountArray[x, y] += self.foodAmount
             self.foodDensityArray[x, y] = density
 

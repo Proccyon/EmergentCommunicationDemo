@@ -1,24 +1,24 @@
 
 #-----Imports-----#
 import numpy as np
+from BaseClasses import Component
 
-
-class Condition:
+class Condition(Component):
 
     def __init__(self):
+        Component.__init__(self)
         self.conditionType = ""
+        self.type = "condition"
 
-    def evaluate(self, sim, agent) -> bool:
-        return False
-
-    def toString(self) -> str:
-        return ""
-
-    def getDescendants(self, parent=(None,0), descendantList=[]):
+    def getDescendants(self, parent=(None,0), descendantList=None):
+        if descendantList is None:
+            descendantList = []
         descendantList.append((self, parent))
         return descendantList
 
-    def getRemoveables(self, parent=(None,0), removableList=[]):
+    def getRemoveables(self, parent=(None,0), removableList=None):
+        if removableList is None:
+            removableList = []
         return removableList
 
     def isOperator(self):
@@ -54,13 +54,17 @@ class BinaryOperator(Condition):
         self.cond, self.cond2 = cond, cond2
         self.conditionType = "BinaryOperator"
 
-    def getDescendants(self, parent=(None,0), descendantList=[]):
+    def getDescendants(self, parent=(None,0), descendantList=None):
+        if descendantList is None:
+            descendantList = []
         Condition.getDescendants(self, parent, descendantList)
         self.cond.getDescendants((self, 0), descendantList)
         self.cond2.getDescendants((self, 1), descendantList)
         return descendantList
 
-    def getRemoveables(self, parent=(None, 0), removeableList=[]):
+    def getRemoveables(self, parent=(None, 0), removeableList=None):
+        if removeableList is None:
+            removeableList = []
 
         if self.cond.isOperator():
             self.cond.getRemoveables((self, 0), removeableList)
@@ -79,8 +83,8 @@ class BinaryOperator(Condition):
 
 class AND(BinaryOperator):
 
-    def evaluate(self, sim, agent) -> bool:
-        return self.cond.evaluate(sim, agent) and self.cond2.evaluate(sim, agent)
+    def run(self, sim, agent) -> bool:
+        return self.cond.run(sim, agent) and self.cond2.run(sim, agent)
 
     def toString(self) -> str:
         return f"({self.cond.toString()} AND {self.cond2.toString()})"
@@ -91,8 +95,8 @@ class AND(BinaryOperator):
 
 class OR(BinaryOperator):
 
-    def evaluate(self, sim, agent) -> bool:
-        return self.cond.evaluate(sim, agent) or self.cond2.evaluate(sim, agent)
+    def run(self, sim, agent) -> bool:
+        return self.cond.run(sim, agent) or self.cond2.run(sim, agent)
 
     def toString(self) -> str:
         return f"({self.cond.toString()} OR {self.cond2.toString()})"
@@ -107,18 +111,22 @@ class NOT(Condition):
         self.cond = cond
         self.conditionType = "UnaryOperator"
 
-    def evaluate(self, sim, agent) -> bool:
-        return not self.cond.evaluate(sim, agent)
+    def run(self, sim, agent) -> bool:
+        return not self.cond.run(sim, agent)
 
     def toString(self) -> str:
         return f"NOT {self.cond.toString()}"
 
-    def getDescendants(self, parent=(None,0), descendantList=[]):
+    def getDescendants(self, parent=(None,0), descendantList=None):
+        if descendantList is None:
+            descendantList = []
         Condition.getDescendants(self, parent, descendantList)
         self.cond.getDescendants((self, 0), descendantList)
         return descendantList
 
-    def getRemoveables(self, parent=(None,0), removeableList=[]):
+    def getRemoveables(self, parent=(None,0), removeableList=None):
+        if removeableList is None:
+            removeableList = []
 
         if self.cond.isOperator():
             self.cond.getRemoveables((self, 0), removeableList)
@@ -136,7 +144,7 @@ class NOT(Condition):
 
 class Addition(Expression):
 
-    def __init__(self, expr1, expr2):
+    def __init__(self, expr1: Expression, expr2: Expression):
         Expression.__init__(self)
         self.expr1, self.expr2 = expr1, expr2
         self.exprType = "BinaryExpr"
@@ -153,7 +161,7 @@ class Addition(Expression):
 
 class Subtraction(Expression):
 
-    def __init__(self, expr1, expr2):
+    def __init__(self, expr1: Expression, expr2: Expression):
         Expression.__init__(self)
         self.expr1, self.expr2 = expr1, expr2
         self.exprType = "BinaryExpr"
@@ -201,10 +209,14 @@ class DynamicValue(Expression):
             else:
                 return 0
         elif self.target == "queried":
-            if agent.queriedAgent is not None:
-                return self.sense(sim, agent.queriedAgent)
-            else:
-                return 0
+            try:
+                if agent.queriedAgent is not None:
+                    return self.sense(sim, agent.queriedAgent)
+                else:
+                    return 0
+            except:
+                print(sim.brain.toString())
+
 
     def sense(self, sim, agent) -> int:
         return 0
@@ -220,20 +232,22 @@ class DynamicValue(Expression):
 
 class GreaterThan(Condition):
 
-    def __init__(self, expr1, expr2):
+    def __init__(self, expr1: Expression, expr2: Expression):
         Condition.__init__(self)
 
         self.expr1, self.expr2 = expr1, expr2
 
         self.conditionType = "Inequality"
 
-    def evaluate(self, sim, agent) -> bool:
+    def run(self, sim, agent) -> bool:
         return self.expr1.evaluate(sim, agent) > self.expr2.evaluate(sim, agent)
 
     def toString(self) -> str:
         return f"{self.expr1.toString()} > {self.expr2.toString()}"
 
-    def getLeaves(self, parent=(None,0), leafList=[]):
+    def getLeaves(self, parent=(None,0), leafList=None):
+        if leafList is None:
+            leafList = []
         leafList.append((self, parent))
         return leafList
 
@@ -266,11 +280,13 @@ class AtomicBoolean(Condition):
         Condition.__init__(self)
         self.target = target
 
-    def getLeaves(self, parent=(None,0), leafList=[]):
+    def getLeaves(self, parent=(None,0), leafList=None):
+        if leafList is None:
+            leafList = []
         leafList.append((self, parent))
         return leafList
 
-    def evaluate(self, sim, agent) -> bool:
+    def run(self, sim, agent) -> bool:
         if self.target == "self":
             return self.sense(sim, agent)
         elif self.target == "saved":

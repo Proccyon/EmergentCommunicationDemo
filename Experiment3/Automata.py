@@ -6,11 +6,12 @@ import Conditions
 from Conditions import *
 from Actions import *
 from MutationMethods import *
+from BaseClasses import Brain
 
-
-class Automata:
+class Automata(Brain):
 
     def __init__(self):
+        Brain.__init__(self)
         self.nodes = initNodes()
         self.n = len(self.nodes)
         self.conditionEdgeArray = np.full((self.n, self.n), None, dtype=Condition)
@@ -57,7 +58,6 @@ class Automata:
         self.conditionEdgeArray[1, 1] = OR(NOT(IsHoldingFood("self")), IsHoldingFood("self"))
         self.conditionEdgeArray[0, 2] = GreaterThan(NearbyFoodAmount("self"), Constant(0))
         self.conditionEdgeArray[2, 2] = GreaterThan(GroundFoodDensity("self"), Constant(0))
-        self.conditionEdgeArray[3, 3] = GreaterThan(WaypointFoodDensity("saved"), WaypointFoodDensity("self"))
 
         self.actionArray[0, 0] = SelectTargetAgent(GreaterThan(WaypointFoodDensity("queried"), WaypointFoodDensity("self")))
         self.actionArray[1, 1] = SelectTargetAgent(GreaterThan(WaypointFoodDensity("queried"), WaypointFoodDensity("self")))
@@ -65,7 +65,6 @@ class Automata:
         self.actionArray[0, 3] = CopyWaypoint()
 
         self.conditionEdgeArray[0, 3] = OR(IsWaypointSet("self"), IsTargetAgentSet("self"))
-
 
         return self
 
@@ -83,7 +82,7 @@ class Automata:
                 continue
 
             # Check if condition is met
-            if condition.evaluate(sim, agent):
+            if condition.run(sim, agent):
                 nextNodes.append(i)
 
         # If more than one condition is met, select a random edge to follow
@@ -97,7 +96,7 @@ class Automata:
             agent.currentNode = nextNode
 
         # Perform the task of the node
-        isFinished = self.nodes[agent.currentNode].act(sim, agent)
+        isFinished = not self.nodes[agent.currentNode].act(sim, agent)
 
         # If action could not be performed, go to new node using the finish edge
         if isFinished:
@@ -169,11 +168,11 @@ class Automata:
         return newCopy
 
 
-    def createOffspring(self, op: OptimizationParameters):
-
-        child = self.copy()
-        child.mutate(op)
-        return child
+    # def createOffspring(self, op: OptimizationParameters):
+    #
+    #     child = self.copy()
+    #     child.mutate(op)
+    #     return child
 
     #---MutationMethods---#
 

@@ -4,14 +4,14 @@ import numpy as np
 from Pathfinder import Pathfinder
 from Conditions import OptimizationParameters
 from MutationMethods import mutateCondition
+from BaseClasses import Component
 
-class Action:
+class Action(Component):
 
     def __init__(self):
+        Component.__init__(self)
         self.name = ""
-
-    def run(self, sim, agent):
-        pass
+        self.type = "action"
 
     def mutate(self, op: OptimizationParameters):
         pass
@@ -29,8 +29,9 @@ class SetWaypoint(Action):
         Action.__init__(self)
         self.name = "SetWaypoint"
 
-    def run(self, sim, agent):
+    def run(self, sim, agent) -> bool:
         agent.waypointPathfinder = sim.getPathfinder(agent.x, agent.y)
+        return True
 
     def copy(self):
         return SetWaypoint()
@@ -42,8 +43,9 @@ class ResetWaypoint(Action):
         Action.__init__(self)
         self.name = "ResetWaypoint"
 
-    def run(self, sim, agent):
+    def run(self, sim, agent) -> bool:
         agent.waypointPathfinder = None
+        return True
 
     def copy(self):
         return ResetWaypoint()
@@ -56,17 +58,19 @@ class SelectTargetAgent(Action):
         self.name = "SelectAgent"
         self.condition = condition
 
-    def run(self, sim, agent):
+    def run(self, sim, agent) -> bool:
         pathfinder = sim.map.pathfinderArray[agent.x, agent.y]
         agentList = []
         for queriedAgent in sim.agentList:
             distance = pathfinder.distanceArray[queriedAgent.x, queriedAgent.y]
             agent.queriedAgent = queriedAgent
-            if distance <= sim.commRange and (self.condition is None or self.condition.evaluate(sim, agent)):
+            if distance <= sim.commRange and (self.condition is None or self.condition.run(sim, agent)):
                 agentList.append(queriedAgent)
 
         if len(agentList) > 0:
             agent.targetAgent = np.random.choice(agentList)
+            return True
+        return False
 
     def mutate(self, op: OptimizationParameters):
         self.condition = mutateCondition(self.condition, op, True)
@@ -90,9 +94,11 @@ class CopyWaypoint(Action):
         Action.__init__(self)
         self.name = "CopyWaypoint"
 
-    def run(self, sim, agent):
+    def run(self, sim, agent) -> bool:
         if agent.targetAgent is not None:
             agent.waypointPathfinder = agent.targetAgent.waypointPathfinder
+            return True
+        return False
 
     def copy(self):
         return CopyWaypoint()

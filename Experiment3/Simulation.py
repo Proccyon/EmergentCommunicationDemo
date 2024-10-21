@@ -3,19 +3,19 @@
 import matplotlib.colors
 import numpy as np
 import pyglet
-from pyglet import shapes
 import time
 import math
-import matplotlib.pyplot as plt
 
 #-----InternalImports-----#
 from Agent import Agent
 from Settings import Settings, Results
 from Saver import save, Log
 from ChunkManager import ChunkManager
+from BaseClasses import Brain
 from Automata import Automata
+from BehaviourTree import BehaviourTree
 from DrawMethods import draw, drawWalls
-from Map import Map, CircleMap, FourRoomsMap, FourRoomsMapSettings
+from Map import *
 #from Plotter import readResults
 
 
@@ -31,7 +31,7 @@ class SimSettings:
 
 class Simulation:
 
-    def __init__(self, map, automata, simSettings):
+    def __init__(self, map: Map, brain: Brain, simSettings: SimSettings):
 
         self.smellRange = simSettings.smellRange
         self.commRange = simSettings.commRange
@@ -57,7 +57,7 @@ class Simulation:
 
         self.wallDrawings = drawWalls(self, self.batch)
 
-        self.automata = automata
+        self.brain = brain
 
 
     def initMap(self, map):
@@ -141,7 +141,7 @@ class Simulation:
 
         for agent in self.agentList:
             agent.resetTarget(self)
-            self.automata.run(self, agent)
+            self.brain.run(self, agent)
 
         self.updateLog()
 
@@ -185,12 +185,12 @@ class Simulation:
         return self.score
 
 
-def runSimHidden(id, map, automata, simSettings, tMax):
-    sim = Simulation(map, automata, simSettings)
+def runSimHidden(id, map, brain, simSettings, tMax):
+    sim = Simulation(map, brain, simSettings)
     return id, sim.runHidden(tMax)
 
-def runSim(map, automata, simSettings):
-    sim = Simulation(map, automata, simSettings)
+def runSim(map, brain, simSettings):
+    sim = Simulation(map, brain, simSettings)
     sim.run()
 
 
@@ -204,12 +204,18 @@ if __name__ == "__main__":
     # jMax = np.argmax(results.scoreArray[i, :])
     # bestAutomata = results.automataArray[i, jMax]
 
-    automata = Automata().initCommunicatingAutomata()
+    automata = Automata().initBaseAutomata()
+    behaviourTree = BehaviourTree().initBaseTree()
+
+    print(behaviourTree.toString())
 
     simSettings = SimSettings(5, 15)
-    mapSettings = FourRoomsMapSettings(12, 6, 6, 1, 30, 10, 1, 2, 3, 4)
-    map = FourRoomsMap(mapSettings)
-    map.init()
+    # mapSettings = FourRoomsMapSettings(12, 6, 6, 1, 30, 10, 1, 2, 3, 4)
+    # map = FourRoomsMap(mapSettings).init()
+    mapSettings = CircleMapSettings(16,30, 10, [1,1], 500)
+    map = CircleMap(mapSettings).init()
+
+
     runSim(map, automata, simSettings)
 
 

@@ -1,7 +1,7 @@
 
 #-----Imports-----#
 import numpy as np
-from Map import CircleMap, FourRoomsMap, FourRoomsMapSettings
+from Map import *
 from Simulation import runSimHidden, SimSettings
 from Automata import Automata
 from Parallelizer import runAsync
@@ -97,14 +97,16 @@ def optimize(map, simSettings, baseAutomata, op):
 if __name__ == "__main__":
 
     op = OptimizationParameters()
-    op.tMax = 800
-    op.runs = 30
+    op.tMax = 1000
+    op.runs = 60
     op.n = 50
-    creatureCount = 15
+    creatureCount = 20
 
-    simSettings = SimSettings(5, 5)
-    mapSettings = FourRoomsMapSettings(6, 6, 6, 1, creatureCount, 10, 1, 2, 4, 8)
+    simSettings = SimSettings(5, 3)
+    mapSettings = FourRoomsMapSettings(6, 6, 6, 1, creatureCount, 10*creatureCount, 1, 2, 4, 8)
     map = FourRoomsMap(mapSettings).init()
+    # mapSettings = CircleMapSettings(8,10, creatureCount, [1,4], 10)
+    # map = CircleMap(mapSettings).init()
 
     automata = Automata().initBaseAutomata()
 

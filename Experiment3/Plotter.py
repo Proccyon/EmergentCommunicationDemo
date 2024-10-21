@@ -211,7 +211,7 @@ def plotCommScoreGraph(settings, results, automataNames, colorList):
 
 if __name__ == "__main__":
 
-    if False:
+    if True:
         settingsArray, resultsArray = readResults()
         settings = settingsArray[0]
         results = resultsArray[0][0]
@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
         plotPopScoreGraph(settings, results, ["Mute Agent", "Communicating Agent"])
 
-    if True:
+    if False:
 
         settingsArray, resultsArray = readResults("CommRangeExperiment")
 

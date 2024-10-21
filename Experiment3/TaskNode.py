@@ -2,19 +2,32 @@
 #-----Imports-----#
 import numpy as np
 from Pathfinder import selectRandomPosition
+from BaseClasses import Component
 
 #---Base---#
 
 # Represents one node of an automata
-class TaskNode:
+class TaskNode(Component):
 
     def __init__(self):
+        Component.__init__(self)
         self.name = ""
+        self.type = "task"
 
     # Performs a task, e.g. picking up food
-    # Returns True when task is finished, False when task is still ongoing
+    # Returns False when task is finished, True when task is still ongoing
     def act(self, sim, agent) -> bool:
         return False
+
+    def run(self, sim, agent) -> bool:
+        if self.act(sim, agent):
+            agent.isDone = True
+            return True
+        else:
+            return False
+
+    def toString(self) -> str:
+        return self.name
 
 #---Action-Implementations---#
 
@@ -34,7 +47,7 @@ class ExploreNode(TaskNode):
 
         # If no next positions exists, e.g. if we are next to a wall, task is finished
         if len(next) == 0:
-            return True
+            return False
 
         # Select random position to move to from possible positions
         #x, y = selectRandomPosition(sim, agent.x, agent.y, next)
@@ -43,7 +56,7 @@ class ExploreNode(TaskNode):
         #Move to new position
         agent.move(x, y, sim)
 
-        return False
+        return True
 
 # Node that makes the agent move towards the colony
 class ReturnHomeNode(TaskNode):
@@ -61,11 +74,7 @@ class ReturnHomeNode(TaskNode):
 
         # If no next positions exists, either we are home or are stuck
         if len(next) == 0:
-            if agent.x == sim.colonyX and agent.y == sim.colonyY and agent.isHoldingFood:
-                sim.score += agent.foodDensity
-                agent.removeFood()
-
-            return True
+            return False
 
         # Select random position to move to from possible positions
         x, y = next[np.random.randint(len(next))]
@@ -73,7 +82,12 @@ class ReturnHomeNode(TaskNode):
         # Move to new position
         agent.move(x, y, sim)
 
-        return False
+        # If we reached the colony, drop off food
+        if agent.x == sim.colonyX and agent.y == sim.colonyY and agent.isHoldingFood:
+            sim.score += agent.foodDensity
+            agent.removeFood()
+
+        return True
 
 
 # Node that makes the agent move towards the colony
@@ -88,14 +102,14 @@ class GoToWaypoint(TaskNode):
         pathfinder = agent.waypointPathfinder
 
         if pathfinder is None:
-            return True
+            return False
 
         # Find possible next positions we can move to so we move towards the waypoint
         next = pathfinder.getNext(agent.x, agent.y)
 
         # If no next positions exists, either we are at waypoint or are stuck
         if len(next) == 0:
-            return True
+            return False
 
         # Select random position to move to from possible positions
         x, y = next[np.random.randint(len(next))]
@@ -103,7 +117,7 @@ class GoToWaypoint(TaskNode):
         # Move to new position
         agent.move(x, y, sim)
 
-        return False
+        return True
 
 # Node that makes the agent pick up nearby food
 class GatherNode(TaskNode):
@@ -113,6 +127,9 @@ class GatherNode(TaskNode):
         self.name = "GatherFood"
 
     def act(self, sim, agent):
+
+        if agent.isHoldingFood:
+            return False
 
         if not agent.foodPathfinder is None and not sim.hasFoodArray[agent.x, agent.y]:
             agent.foodPathfinder = None
@@ -132,7 +149,7 @@ class GatherNode(TaskNode):
 
             # If no nearby food is found we are done
             if minPathfinder is None:
-                return True
+                return False
 
             agent.foodPathfinder = minPathfinder
 
@@ -143,13 +160,12 @@ class GatherNode(TaskNode):
         if len(nextPositions) == 0:
             agent.foodPathfinder = None
             agent.gatherFood(sim)
-
             return True
 
         x, y = nextPositions[np.random.randint(len(nextPositions))]
         agent.move(x, y, sim)
 
-        return False
+        return True
 
 
 # Node that makes the agent pick up nearby food
@@ -163,11 +179,11 @@ class RandomWalkNode(TaskNode):
         newPositions = sim.map.neighbourArray[agent.x, agent.y]
 
         if len(newPositions) == 0:
-            return True
+            return False
 
         xNew, yNew = newPositions[np.random.randint(len(newPositions))]
         agent.move(xNew, yNew, sim)
-        return False
+        return True
 
         # newPositions = []
         # for dx, dy in [(1, 0), (0, 1), (-1, 0), (0, -1)]:
