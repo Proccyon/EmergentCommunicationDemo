@@ -38,15 +38,19 @@ class Simulation:
 
         self.agentList = []
         self.foodPosList = []
+        self.foodWithinRangeArray = np.full((map.Lx, map.Ly), -1, dtype=int)
         self.idCounter = 0
         self.t = 0
         self.score = 0
+        self.scoreList = []
+        self.bestGatheredDensity = 0
+        self.foodCollected = 0
 
         self.time = time.time()
         self.dtLog = Log()
 
         #VisualSettings
-        self.creatureSize = 8
+        self.creatureSize = int(8 * (100 / max(map.Lx, map.Ly)))
         self.sidebarLength = 300
 
         self.initMap(map)
@@ -58,7 +62,6 @@ class Simulation:
         self.wallDrawings = drawWalls(self, self.batch)
 
         self.brain = brain
-
 
     def initMap(self, map):
 
@@ -143,6 +146,7 @@ class Simulation:
             agent.resetTarget(self)
             self.brain.run(self, agent)
 
+        self.scoreList.append(self.score)
         self.updateLog()
 
         # if self.runningHidden and self.t % 300 == 0:
@@ -182,7 +186,7 @@ class Simulation:
         for _ in range(steps):
             self.step()
 
-        return self.score
+        return np.array([self.score, np.average(self.scoreList), self.bestGatheredDensity, self.foodCollected])
 
 
 def runSimHidden(id, map, brain, simSettings, tMax):
@@ -205,18 +209,20 @@ if __name__ == "__main__":
     # bestAutomata = results.automataArray[i, jMax]
 
     automata = Automata().initBaseAutomata()
-    behaviourTree = BehaviourTree().initBaseTree()
+    behaviourTree = BehaviourTree().initCommunicatingAgent()
 
-    print(behaviourTree.toString())
+    simSettings = SimSettings(5, 2)
+    mapSettings = FourRoomsMapSettings(6, 6, 6, 1, 30, 300, 1, 2, 4, 8)
+    map = FourRoomsMap(mapSettings).init()
+    # mapSettings = CircleMapSettings(16,30, 10, [1,1], 500)
+    # map = CircleMap(mapSettings).init()
 
-    simSettings = SimSettings(5, 15)
-    # mapSettings = FourRoomsMapSettings(12, 6, 6, 1, 30, 10, 1, 2, 3, 4)
-    # map = FourRoomsMap(mapSettings).init()
-    mapSettings = CircleMapSettings(16,30, 10, [1,1], 500)
-    map = CircleMap(mapSettings).init()
+    t0 = time.time()
+    runSimHidden(0, map, behaviourTree, simSettings, 1000)
+    print(time.time() - t0)
 
 
-    runSim(map, automata, simSettings)
+    #runSim(map, behaviourTree, simSettings)
 
 
 

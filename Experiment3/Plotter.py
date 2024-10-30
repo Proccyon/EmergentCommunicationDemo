@@ -178,12 +178,12 @@ def plotPopScoreGraph(settings, results, automataNames):
 
 def plotCommScoreGraph(settings, results, automataNames, colorList):
 
-    scoreArray = results.scoreArray
+    scoreArray = results.scoreArray / results.maxScore
     commRangeList = settings.commRangeList
 
     maxScore = 0
     for i in range(scoreArray.shape[0]):
-        scoreList = scoreArray[i, :, :] / settings.mapSettings.creatureCount
+        scoreList = scoreArray[i, :, :]
         avgScoreList = np.average(scoreList, axis=1)
         lowerBound = np.percentile(scoreList, 15.9, axis=1)
         upperBound = np.percentile(scoreList, 84.1, axis=1)
@@ -193,7 +193,7 @@ def plotCommScoreGraph(settings, results, automataNames, colorList):
         plt.scatter(commRangeList, avgScoreList, color=color, s=12)
         plt.plot(commRangeList, lowerBound, alpha=0.1, color=color)
         plt.plot(commRangeList, upperBound, alpha=0.1, color=color)
-        plt.fill_between(commRangeList, lowerBound, upperBound, alpha=0.25, label="15.9% percentile", color=color)
+        plt.fill_between(commRangeList, lowerBound, upperBound, alpha=0.25, color=color)
         maxScore = max(maxScore, np.amax(upperBound))
 
     plt.title(f"Score vs commRange with Tmax={settings.op.tMax}, population={settings.mapSettings.creatureCount}")
@@ -208,10 +208,70 @@ def plotCommScoreGraph(settings, results, automataNames, colorList):
 
     plt.show()
 
+def plotCommScoreGraphSingle(settings, results, color, index=0):
+
+    fig, ax1, = plt.subplots(figsize=(10, 5))
+    ax2 = ax1.twinx()
+
+    scoreArray = results.scoreArray / results.maxScore
+    commRangeList = settings.commRangeList
+
+    maxScore = 0
+    maxDensity = np.amax(results.bestFoodDensityArray)
+    avgMaxFoodReached = np.average(results.bestFoodDensityArray == maxDensity, axis=2)
+    avgFoodCollected = np.average(results.foodCollectedArray, axis=2) / np.amax(results.foodCollectedArray)
+    print(results.foodCollectedArray)
+
+    scoreList = scoreArray[index, :, :]
+    avgScoreList = np.average(scoreList, axis=1)
+    lowerBound = np.percentile(scoreList, 15.9, axis=1)
+    upperBound = np.percentile(scoreList, 84.1, axis=1)
+
+    line1, = ax1.plot(commRangeList, avgScoreList, label="Average score", color=color)
+    ax1.scatter(commRangeList, avgScoreList, color=color, s=12)
+    ax1.plot(commRangeList, lowerBound, alpha=0.1, color=color)
+    ax1.plot(commRangeList, upperBound, alpha=0.1, color=color)
+    ax1.fill_between(commRangeList, lowerBound, upperBound, alpha=0.25, color=color)
+    maxScore = max(maxScore, np.amax(upperBound))
+
+    line2, = ax2.plot(avgMaxFoodReached[index,:], linestyle="--", color="black", label="p(bestFoodReached)")
+    line3, = ax2.plot(avgFoodCollected[index,:], linestyle="--", color="red", label="Average food collected")
+
+    ax1.set_title(f"Score vs commRange with Tmax={settings.op.tMax}, population={settings.mapSettings.creatureCount}")
+    ax1.set_xlim(0, np.amax(commRangeList))
+    ax1.set_ylim(0, 1.1 * maxScore)
+    ax2.set_ylim(0, 1.1)
+
+    ax1.set_xlabel("Maximum communication range")
+    ax1.set_ylabel("Average Score per agent / Max possible score")
+    ax2.set_ylabel("Fraction of runs where best food is reached")
+
+    ax1.grid(linestyle="--", alpha=0.5)
+
+    lines = [line1, line2, line3]
+    labels = [line.get_label() for line in lines]
+    ax1.legend(lines, labels, loc='upper right', fontsize=8)
+
+
+
+
+
+
+
+    # # Plot on the second subplot
+    # ax2.plot(x, y2, color='green', label='cos(x)')
+    # ax2.set_title('Cosine Function')
+    # ax2.set_xlabel('x')
+    # ax2.set_ylabel('cos(x)')
+    # ax2.legend()
+    #
+    # # Display the plots
+    # plt.tight_layout()  # Adjusts the layout to prevent overlap
+    plt.show()
 
 if __name__ == "__main__":
 
-    if True:
+    if False:
         settingsArray, resultsArray = readResults()
         settings = settingsArray[0]
         results = resultsArray[0][0]
@@ -233,15 +293,14 @@ if __name__ == "__main__":
 
         plotPopScoreGraph(settings, results, ["Mute Agent", "Communicating Agent"])
 
-    if False:
+    if True:
 
         settingsArray, resultsArray = readResults("CommRangeExperiment")
 
-        settings = settingsArray[2]
-        results = resultsArray[2][0]
+        settings = settingsArray[8]
+        results = resultsArray[8][0]
 
-        plotCommScoreGraph(settings, results, ["Communicating Agent"], ["green"])
-
+        plotCommScoreGraphSingle(settings, results, "green")
 
 
 

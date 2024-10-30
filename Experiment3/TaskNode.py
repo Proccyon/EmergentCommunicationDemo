@@ -84,8 +84,7 @@ class ReturnHomeNode(TaskNode):
 
         # If we reached the colony, drop off food
         if agent.x == sim.colonyX and agent.y == sim.colonyY and agent.isHoldingFood:
-            sim.score += agent.foodDensity
-            agent.removeFood()
+            agent.dropOffFood(sim)
 
         return True
 
@@ -176,12 +175,14 @@ class RandomWalkNode(TaskNode):
         self.name = "RandomWalk"
 
     def act(self, sim, agent):
+
         newPositions = sim.map.neighbourArray[agent.x, agent.y]
 
         if len(newPositions) == 0:
             return False
 
         xNew, yNew = newPositions[np.random.randint(len(newPositions))]
+
         agent.move(xNew, yNew, sim)
         return True
 

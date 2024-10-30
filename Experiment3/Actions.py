@@ -103,6 +103,25 @@ class CopyWaypoint(Action):
     def copy(self):
         return CopyWaypoint()
 
+
+class SetInternalBool(Action):
+
+    def __init__(self, index: int, value: bool):
+        Action.__init__(self)
+        self.index = index
+        self.value = value
+        self.name = f"Bool{index}={value}"
+
+    def run(self, sim, agent) -> bool:
+        agent.boolArray[self.index] = self.value
+        return True
+
+    def copy(self):
+        return SetInternalBool(self.index, self.value)
+
+def getActionFactories():
+    return [SetWaypoint, ResetWaypoint, SelectTargetAgent, CopyWaypoint]
+
 def getActionFactories():
     return [SetWaypoint, ResetWaypoint, SelectTargetAgent, CopyWaypoint]
 

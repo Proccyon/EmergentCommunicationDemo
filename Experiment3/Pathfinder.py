@@ -11,8 +11,6 @@ class Pathfinder:
 
         self.distanceArray = np.full((map.Lx, map.Ly), 999, dtype=np.uint16)
         self.directionArray = np.empty((map.Lx, map.Ly), dtype=list)
-        self.weightArray = np.zeros((map.Lx, map.Ly), dtype=float)
-        self.weightArray[self.x0, self.y0] = 1
         self.directionDict = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
         self.setupDirectionArray()
 

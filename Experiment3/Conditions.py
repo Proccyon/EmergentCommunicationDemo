@@ -36,7 +36,7 @@ class Expression:
     def __init__(self):
         self.exprType = ""
 
-    def evaluate(self, sim, agent) -> int:
+    def evaluate(self, sim, agent) -> float:
         return 0
 
     def toString(self) -> str:
@@ -149,7 +149,7 @@ class Addition(Expression):
         self.expr1, self.expr2 = expr1, expr2
         self.exprType = "BinaryExpr"
 
-    def evaluate(self, sim, agent) -> int:
+    def evaluate(self, sim, agent) -> float:
         return self.expr1.evaluate(sim, agent) + self.expr2.evaluate(sim, agent)
 
     def toString(self) -> str:
@@ -166,7 +166,7 @@ class Subtraction(Expression):
         self.expr1, self.expr2 = expr1, expr2
         self.exprType = "BinaryExpr"
 
-    def evaluate(self, sim, agent) -> int:
+    def evaluate(self, sim, agent) -> float:
         return self.expr1.evaluate(sim, agent) - self.expr2.evaluate(sim, agent)
 
     def toString(self) -> str:
@@ -182,7 +182,7 @@ class Constant(Expression):
         self.value = value
         self.exprType = "Const"
 
-    def evaluate(self, sim, agent) -> int:
+    def evaluate(self, sim, agent) -> float:
         return self.value
 
     def toString(self) -> str:
@@ -192,6 +192,26 @@ class Constant(Expression):
         return Constant(self.value)
 
 
+class Boltzmann(Expression):
+
+    def __init__(self, expr1: Expression, expr2: Expression, temperature: Constant, pMax: float = 1):
+        Expression.__init__(self)
+        self.expr1, self.expr2 = expr1, expr2
+        self.temperature = temperature
+        self.pMax = pMax
+        self.exprType = "value"
+
+    def evaluate(self, sim, agent) -> float:
+        E1, E2 = self.expr1.evaluate(sim, agent), self.expr2.evaluate(sim, agent)
+        T = self.temperature.evaluate(sim, agent)
+        frac = np.exp((E1 - E2) / T)
+        return self.pMax / (1 + frac)
+
+    def toString(self) -> str:
+        return f"Boltz({self.expr1.toString()}, {self.expr2.toString()}, {self.temperature.toString()})"
+
+    def copy(self):
+        return Boltzmann(self.expr1.copy(), self.expr2.copy(), self.temperature.copy(), self.pMax)
 
 class DynamicValue(Expression):
 
@@ -200,7 +220,7 @@ class DynamicValue(Expression):
         self.exprType = "Value"
         self.target = target
 
-    def evaluate(self, sim, agent) -> int:
+    def evaluate(self, sim, agent) -> float:
         if self.target == "self":
             return self.sense(sim, agent)
         elif self.target == "saved":
@@ -218,7 +238,7 @@ class DynamicValue(Expression):
                 print(sim.brain.toString())
 
 
-    def sense(self, sim, agent) -> int:
+    def sense(self, sim, agent) -> float:
         return 0
 
     def toString(self) -> str:
@@ -342,6 +362,41 @@ class IsTargetAgentSet(AtomicBoolean):
     def copy(self):
         return IsTargetAgentSet(self.target)
 
+class RandomChance(AtomicBoolean):
+
+    def __init__(self, target: str, p: Expression):
+        AtomicBoolean.__init__(self, target)
+        self.p = p
+
+    def sense(self, sim, agent) -> bool:
+        return np.random.random() < self.p.evaluate(sim, agent)
+
+    def varName(self) -> str:
+        return f"random(p={self.p.toString()})"
+
+    def copy(self):
+        return RandomChance(self.target, self.p.copy())
+
+
+class CheckInternalBool(AtomicBoolean):
+
+    def __init__(self, target, index):
+        AtomicBoolean.__init__(self, target)
+        self.index = index
+
+    def sense(self, sim, agent) -> bool:
+        return agent.boolArray[self.index]
+
+    def varName(self) -> str:
+        return f"Bool{self.index}"
+
+    def copy(self):
+        return CheckInternalBool(self.target, self.index)
+
+
+
+
+
 #---InequalityImplementations---#
 
 class NearbyFoodAmount(DynamicValue):
@@ -349,14 +404,15 @@ class NearbyFoodAmount(DynamicValue):
     def sense(self, sim, agent):
 
         foodCount = 0
-        #for x, y in sim.foodChunkManager.getNeighbours(agent.x, agent.y):
-        for x, y in sim.foodPosList:
+        for x, y in sim.foodChunkManager.getNeighbours(agent.x, agent.y):
             pathfinder = sim.getPathfinder(x, y)
             distance = pathfinder.getDistance(agent.x, agent.y)
             if distance <= sim.smellRange:
                 foodCount += 1
 
         return foodCount
+
+
 
     def varName(self) -> str:
         return "NearbyFood"
@@ -441,6 +497,53 @@ class ColonyDistance(DynamicValue):
 
     def copy(self):
         return ColonyDistance(self.target)
+
+# Calculates the distance between own waypoint and waypoint of set target(queried or saved)
+class DistanceBetweenWaypoints(DynamicValue):
+
+    def __init__(self, target, secondTarget):
+        DynamicValue.__init__(self, target)
+        self.secondTarget = secondTarget
+
+    def sense(self, sim, agent):
+
+        pathfinder = agent.waypointPathfinder
+        secondPathfinder = None
+        if self.secondTarget == "saved" and agent.targetAgent is not None:
+            secondPathfinder = agent.targetAgent.waypointPathfinder
+        elif self.secondTarget == "queried" and agent.queriedAgent is not None:
+            secondPathfinder = agent.queriedAgent.waypointPathfinder
+
+        if pathfinder is not None and secondPathfinder is not None:
+            return pathfinder.getDistance(secondPathfinder.x0, secondPathfinder.y0)
+        else:
+            return 999
+
+    def varName(self) -> str:
+        return "DistanceBetweenWaypoints"
+
+    def copy(self):
+        return DistanceBetweenWaypoints(self.target, self.secondTarget)
+
+# Calculates quality of food at waypoint (food density / distance from colony)
+class WaypointFoodEfficiency(DynamicValue):
+
+
+    def sense(self, sim, agent):
+
+        if agent.waypointPathfinder is None:
+            return 0
+        else:
+            distance = agent.waypointPathfinder.getDistance(sim.colonyX, sim.colonyY)
+            x0, y0 = agent.waypointPathfinder.x0, agent.waypointPathfinder.y0
+            foodDensity = sim.foodDensityArray[x0, y0]
+            return foodDensity / distance
+
+    def varName(self) -> str:
+        return "WaypointFoodEfficiency"
+
+    def copy(self):
+        return WaypointFoodEfficiency(self.target)
 
 
 #---FactoryList---#

@@ -15,10 +15,12 @@ class Agent:
         self.isHoldingFood = False
         self.foodDensity = 0
 
+        self.boolArray = np.full(10, False, bool)
         self.foodPathfinder = None
         self.waypointPathfinder = None
         self.targetAgent = None
         self.isDone = False
+        self.queriedAgent = None
 
     def move(self, xNew: int, yNew: int, sim):
 
@@ -45,6 +47,12 @@ class Agent:
         sim.removeFood(self.x, self.y, 1)
         self.isHoldingFood = True
         self.foodDensity = sim.foodDensityArray[self.x, self.y]
+
+    def dropOffFood(self, sim):
+        sim.score += self.foodDensity
+        sim.foodCollected += 1
+        sim.bestGatheredDensity = max(sim.bestGatheredDensity, self.foodDensity)
+        self.removeFood()
 
     def removeFood(self):
         self.isHoldingFood = False

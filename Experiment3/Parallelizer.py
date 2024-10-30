@@ -3,9 +3,9 @@
 import concurrent.futures
 import numpy as np
 
-def runAsync(func, nRuns, args=[], maxSize=50):
+def runAsync(func, nRuns, args=[], maxSize=16):
 
-    resultsList = np.empty(nRuns)
+    resultsList = np.empty(nRuns, dtype=list)
 
     runsLeft = nRuns
 

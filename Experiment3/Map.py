@@ -81,6 +81,70 @@ class Map:
                     self.foodDensityArray[x, y] = foodDensity
 
 
+    # Calculate the maximum possible score in a given time
+    def calculateMaxScore(self, tMax, popSize):
+
+        # First we retrieve data about all the food in the map
+        foodAmountList = []
+        foodDensityList = []
+        foodDistanceList = []
+        for x in range(self.Lx):
+            for y in range(self.Ly):
+                if self.foodAmountArray[x, y] == 0:
+                    continue
+
+                foodAmountList.append(self.foodAmountArray[x, y])
+                foodDensityList.append(self.foodDensityArray[x, y])
+                distance = self.pathfinderArray[self.colonyX, self.colonyY].getDistance(x, y)
+                if distance == 0:
+                    distance = 1
+                foodDistanceList.append(distance)
+
+        foodAmountList = np.array(foodAmountList)
+        foodDensityList = np.array(foodDensityList)
+        foodDistanceList = np.array(foodDistanceList)
+
+        # Calculate rate at which each food piece can generate score
+        gatherRateList = foodDensityList / (2 * foodDistanceList + 1)
+
+        # Now we sort food based on which gives most score per tick
+        idList = np.argsort(-gatherRateList)
+
+        foodAmountList = foodAmountList[idList]
+        foodDensityList = foodDensityList[idList]
+        gatherRateList = gatherRateList[idList]
+
+        # Calculate how long it would take to gather each piece of food
+        dtList = foodAmountList * foodDensityList / (popSize * gatherRateList)
+
+        # Calculate total score obtained when food piece is fully gathered
+        scorePerFoodList = foodAmountList * foodDensityList
+
+        # Now calculate score obtained when food is gathered in most efficient order
+        t = 0
+        score = 0
+        for i in range(len(idList)):
+            dt = dtList[i]
+            tNew = t + dt
+            if tNew < tMax:
+                score += scorePerFoodList[i]
+                t = tNew
+            else:
+                score += scorePerFoodList[i] * (tMax - t) / (tNew - t)
+                break
+
+        return score
+
+    def calculateMaxAUC(self, tMax, popSize):
+
+        maxAUC = 0
+        for t in range(tMax):
+            maxAUC += self.calculateMaxScore(t+1, popSize)
+
+        return maxAUC / tMax
+
+
+
 
 
 class CircleMapSettings(MapSettings):
