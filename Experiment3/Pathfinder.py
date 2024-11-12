@@ -1,87 +1,153 @@
 
 #-----Imports-----#
 import numpy as np
+import os
 
 class Pathfinder:
 
-    def __init__(self, map, x0, y0):
+    def __init__(self, map):
+
+        self.directionDict = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
         self.map = map
         self.Lx, self.Ly = map.Lx, map.Ly
-        self.x0, self.y0 = x0, y0
 
-        self.distanceArray = np.full((map.Lx, map.Ly), 999, dtype=np.uint16)
-        self.directionArray = np.empty((map.Lx, map.Ly), dtype=list)
-        self.directionDict = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
-        self.setupDirectionArray()
+        self.setupTranslationArrays()
 
-        #self.updateFrom(x0, y0)
+    def init(self):
+
+        folderName = self.map.getFileName()
+        if os.path.isdir(folderName):
+            self.load()
+        else:
+            self.generateArrays()
+            self.save()
+
+        return self
+
+    def generateArrays(self):
+
+        n = len(self.indexToCoords)
+        self.distanceArray = np.full((n, n), 999, dtype=np.uint16)
+        self.directionArray = np.zeros((n, n, 4), dtype=bool)
+
+        for i in range(n):
+            x0, y0 = self.indexToCoords[i]
+            self.updateFrom(x0, y0)
+
+        return self
+
+    def load(self):
+        folderName = self.map.getFileName()
+        self.distanceArray = np.load(f"{folderName}/distanceArray.npy", mmap_mode='r')
+        self.directionArray = np.load(f"{folderName}/directionArray.npy", mmap_mode='r')
+        return self
+
+    def save(self):
+        folderName = self.map.getFileName()
+        if not os.path.isdir(folderName):
+            os.makedirs(folderName)
+
+        np.save(f"{folderName}/distanceArray.npy", self.distanceArray)
+        np.save(f"{folderName}/directionArray.npy", self.directionArray)
 
 
-    def setupDirectionArray(self):
+    def setupTranslationArrays(self):
 
+        coordsToIndex = np.full((self.Lx, self.Ly), -1, dtype=int)
+        indexToCoords = []
+
+        i = 0
         for x in range(self.Lx):
             for y in range(self.Ly):
-                self.directionArray[x,y] = []
+                if self.map.hasWallArray[x, y]:
+                    continue
 
-    def getNext(self, x, y):
+                indexToCoords.append([x, y])
+                coordsToIndex[x, y] = i
+                i += 1
 
-        if not self.isValidPosition(x, y):
+        self.coordsToIndex = coordsToIndex
+        self.indexToCoords = np.array(indexToCoords)
+
+
+
+    def getNext(self, x0, y0, x, y):
+
+        if not self.map.isValidPosition(x, y):
             return []
 
         next = []
-        for ind in self.directionArray[x, y]:
-            dx, dy = self.directionDict[ind]
-            next.append((x + dx, y + dy))
+        for i, isTrue in enumerate(self.getDirections(x0, y0, x, y)):
+            if isTrue:
+                dx, dy = self.directionDict[i]
+                next.append((x + dx, y + dy))
 
         return next
 
-    def getPrev(self, x, y):
+    def getPrev(self, x0, y0, x, y):
 
-        if not self.isValidPosition(x, y):
+        if not self.map.isValidPosition(x, y):
             return []
 
         prev = []
-        for ind in self.directionDict.keys():
-            if not ind in self.directionArray[x, y]:
-                dx, dy = self.directionDict[ind]
+        for i, isTrue in enumerate(self.getDirections(x0, y0, x, y)):
+            if not isTrue:
+                dx, dy = self.directionDict[i]
                 xNew, yNew = x + dx, y + dy
-                if self.isValidPosition(xNew, yNew):
-                    prev.append((x + dx, y + dy))
+                if self.map.isValidPosition(xNew, yNew):
+                    prev.append((xNew, yNew))
 
         return prev
 
-    def getDistance(self, x, y):
-        return self.distanceArray[x, y]
+    def getDistance(self, x0, y0, x, y):
+        i0 = self.coordsToIndex[x0, y0]
+        i1 = self.coordsToIndex[x, y]
 
-    def isValidPosition(self, x, y):
-        return x >= 0 and y >= 0 and x < self.Lx and y < self.Ly and not self.map.hasWallArray[x, y]
+        return self.distanceArray[i0, i1]
+
+    def setDistance(self, x0, y0, x, y, distance):
+        i0 = self.coordsToIndex[x0, y0]
+        i1 = self.coordsToIndex[x, y]
+        self.distanceArray[i0, i1] = distance
+
+    def getDirections(self, x0, y0, x, y):
+        i0 = self.coordsToIndex[x0, y0]
+        i1 = self.coordsToIndex[x, y]
+        return self.directionArray[i0, i1]
+
+    def setDirections(self, x0, y0, x, y, directions):
+        i0 = self.coordsToIndex[x0, y0]
+        i1 = self.coordsToIndex[x, y]
+        self.directionArray[i0, i1] = directions
+
 
     # Updates the distance and direction of a single position and returns nearby positions needing updates
-    def updateTile(self, x, y, distance):
+    def updateTile(self, x0, y0, x, y, distance):
 
         toUpdate = set()  # Set of neighbouring positions that need updates
-        directions = []  # List of directions that lead to the destination
+        directions = np.zeros(4, dtype=bool)  # List of directions that lead to the destination
 
         for ind, direction in self.directionDict.items():
             dx, dy = self.directionDict[ind]
             xNew, yNew = x+dx, y+dy
-            if not self.isValidPosition(xNew, yNew):
+            if not self.map.isValidPosition(xNew, yNew):
                 continue
 
-            if self.distanceArray[xNew, yNew] > distance:
+            newDistance = self.getDistance(x0, y0, xNew, yNew)
+            if newDistance > distance:
                 toUpdate.add((xNew, yNew))
 
-            if self.distanceArray[xNew, yNew] == distance - 1:
-                directions.append(ind)
+            if newDistance == distance - 1:
+                directions[ind] = True
 
-        self.distanceArray[x, y] = distance
-        self.directionArray[x, y] = directions
+        self.setDistance(x0, y0, x, y, distance)
+        self.setDirections(x0, y0, x, y, directions)
         return toUpdate
 
     #Calculates the distance at a position based on minimum neighbour distance
-    def calculateDistance(self, x, y):
+    def calculateDistance(self, x, y, x0, y0):
 
-        if x == self.x0 and y == self.y0:
+        if x == x0 and y == y0:
             return 0
         else:
 
@@ -89,7 +155,7 @@ class Pathfinder:
             for ind, direction in self.directionDict.items():
                 dx, dy = self.directionDict[ind]
                 xNew, yNew = x + dx, y + dy
-                if not self.isValidPosition(xNew, yNew):
+                if not self.map.isValidPosition(xNew, yNew):
                     continue
 
                 distance = np.amin([distance, self.distanceArray[xNew, yNew]])
@@ -97,37 +163,25 @@ class Pathfinder:
             return distance
 
     # Update tile distances and directions starting at position (x, y)
-    def updateFrom(self, x, y, endPosition=None):
+    def updateFrom(self, x0, y0):
 
-        if not self.isValidPosition(x, y):
+        if not self.map.isValidPosition(x0, y0):
             return
 
-        distance = self.calculateDistance(x, y)
+        distance = self.calculateDistance(x0, y0, x0, y0)
 
-        currentUpdating = {(x, y)}
+        currentUpdating = {(x0, y0)}
         nextUpdating = set()
 
-        if endPosition is not None:
-            xEnd, yEnd = endPosition
-        else:
-            xEnd, yEnd = -1,-1
-
-        done = False
-        while len(currentUpdating) > 0 and not done:
+        while len(currentUpdating) > 0:
             for xNew, yNew in currentUpdating:
-                toUpdate = self.updateTile(xNew, yNew, distance)
+                toUpdate = self.updateTile(x0, y0, xNew, yNew, distance)
                 nextUpdating = nextUpdating.union(toUpdate)
-
-                if endPosition is not None and xNew == xEnd and yNew == yEnd:
-                    done = True
 
             currentUpdating = nextUpdating
             nextUpdating = set()
             distance += 1
 
-
-    def init(self, endPositions=None):
-        self.updateFrom(self.x0, self.y0, endPositions)
 
 
 def selectRandomPosition(sim, x, y, positions):

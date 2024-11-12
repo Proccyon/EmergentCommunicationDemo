@@ -17,6 +17,7 @@ from BehaviourTree import BehaviourTree
 from DrawMethods import draw, drawWalls
 from Map import *
 #from Plotter import readResults
+from Parallelizer import runAsync
 
 
 class SimSettings:
@@ -31,8 +32,9 @@ class SimSettings:
 
 class Simulation:
 
-    def __init__(self, map: Map, brain: Brain, simSettings: SimSettings):
+    def __init__(self, map: Map, brain: Brain, simSettings: SimSettings, pathfinder: Pathfinder):
 
+        self.pathfinder = pathfinder
         self.smellRange = simSettings.smellRange
         self.commRange = simSettings.commRange
 
@@ -98,8 +100,10 @@ class Simulation:
         self.agentList.append(creature)
         self.idCounter += 1
 
-    def getPathfinder(self, x, y):
-        return self.map.pathfinderArray[x, y]
+    def getDistance(self, x0, y0, x, y):
+        return self.pathfinder.getDistance(x0, y0, x, y)
+
+
 
     def isValidPosition(self, x, y):
         return x >= 0 and y >= 0 and x < self.Lx and y < self.Ly and not self.hasWallArray[x, y]
@@ -190,11 +194,13 @@ class Simulation:
 
 
 def runSimHidden(id, map, brain, simSettings, tMax):
-    sim = Simulation(map, brain, simSettings)
+    pathfinder = Pathfinder(map).init()
+
+    sim = Simulation(map, brain, simSettings, pathfinder)
     return id, sim.runHidden(tMax)
 
-def runSim(map, brain, simSettings):
-    sim = Simulation(map, brain, simSettings)
+def runSim(map, brain, simSettings, pathfinder):
+    sim = Simulation(map, brain, simSettings, pathfinder)
     sim.run()
 
 
@@ -209,20 +215,18 @@ if __name__ == "__main__":
     # bestAutomata = results.automataArray[i, jMax]
 
     automata = Automata().initBaseAutomata()
-    behaviourTree = BehaviourTree().initCommunicatingAgent()
+    behaviourTree = BehaviourTree().initCommunicatingAgent(30)
 
     simSettings = SimSettings(5, 2)
-    mapSettings = FourRoomsMapSettings(6, 6, 6, 1, 30, 300, 1, 2, 4, 8)
+    mapSettings = FourRoomsMapSettings(22, 6, 6, 1, 30, 300, 1, 2, 4, 8)
     map = FourRoomsMap(mapSettings).init()
-    # mapSettings = CircleMapSettings(16,30, 10, [1,1], 500)
-    # map = CircleMap(mapSettings).init()
+    pathfinder = Pathfinder(map).init()
 
-    t0 = time.time()
-    runSimHidden(0, map, behaviourTree, simSettings, 1000)
-    print(time.time() - t0)
+    # t0 = time.time()
+    # runAsync(runSimHidden, 200, [map, behaviourTree, simSettings, 1000])
+    # print(time.time() - t0)
 
-
-    #runSim(map, behaviourTree, simSettings)
+    runSim(map, behaviourTree, simSettings, pathfinder)
 
 
 

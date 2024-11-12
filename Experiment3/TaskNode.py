@@ -40,10 +40,8 @@ class ExploreNode(TaskNode):
 
     def act(self, sim, agent):
 
-        pathfinder = sim.getPathfinder(sim.colonyX, sim.colonyY)
-
         # Find possible next positions we can move to so we move away from the colony
-        next = pathfinder.getPrev(agent.x, agent.y)
+        next = sim.pathfinder.getPrev(agent.x, agent.y, sim.colonyX, sim.colonyY)
 
         # If no next positions exists, e.g. if we are next to a wall, task is finished
         if len(next) == 0:
@@ -67,10 +65,8 @@ class ReturnHomeNode(TaskNode):
 
     def act(self, sim, agent):
 
-        pathfinder = sim.getPathfinder(sim.colonyX, sim.colonyY)
-
         # Find possible next positions we can move to so we move towards the colony
-        next = pathfinder.getNext(agent.x, agent.y)
+        next = sim.pathfinder.getNext(sim.colonyX, sim.colonyY, agent.x, agent.y)
 
         # If no next positions exists, either we are home or are stuck
         if len(next) == 0:
@@ -89,7 +85,7 @@ class ReturnHomeNode(TaskNode):
         return True
 
 
-# Node that makes the agent move towards the colony
+# Node that makes the agent move towards its set coordinates
 class GoToWaypoint(TaskNode):
 
     def __init__(self):
@@ -98,13 +94,13 @@ class GoToWaypoint(TaskNode):
 
     def act(self, sim, agent):
 
-        pathfinder = agent.waypointPathfinder
+        xWaypoint, yWaypoint = agent.waypointCoords
 
-        if pathfinder is None:
+        if agent.waypointCoords is None:
             return False
 
         # Find possible next positions we can move to so we move towards the waypoint
-        next = pathfinder.getNext(agent.x, agent.y)
+        next = sim.pathfinder.getNext(xWaypoint, yWaypoint, agent.x, agent.y)
 
         # If no next positions exists, either we are at waypoint or are stuck
         if len(next) == 0:
@@ -130,34 +126,33 @@ class GatherNode(TaskNode):
         if agent.isHoldingFood:
             return False
 
-        if not agent.foodPathfinder is None and not sim.hasFoodArray[agent.x, agent.y]:
-            agent.foodPathfinder = None
+        if not agent.foodCoords is None and not sim.hasFoodArray[agent.x, agent.y]:
+            agent.foodCoords = None
 
         # If agent has not yet found food to walk towards, locate nearby food
-        if agent.foodPathfinder is None:
+        if agent.foodCoords is None:
 
             minDistance = 999
-            minPathfinder = None
+            minCoords = None
             for x, y in sim.foodPosList:
-                pathfinder = sim.getPathfinder(x, y)
-
-                distance = pathfinder.getDistance(agent.x, agent.y)
+                distance = sim.getDistance(agent.x, agent.y, x, y)
                 if distance < minDistance and distance <= sim.smellRange:
                     minDistance = min(minDistance, distance)
-                    minPathfinder = pathfinder
+                    minCoords = [x, y]
 
             # If no nearby food is found we are done
-            if minPathfinder is None:
+            if minCoords is None:
                 return False
 
-            agent.foodPathfinder = minPathfinder
+            agent.foodCoords = minCoords
 
         # Get next positions we can move to in order to move closer to food
-        nextPositions = agent.foodPathfinder.getNext(agent.x, agent.y)
+        xFood, yFood = agent.foodCoords
+        nextPositions = sim.pathfinder.getNext(xFood, yFood, agent.x, agent.y)
 
         # If there are none we are probably standing on some food
         if len(nextPositions) == 0:
-            agent.foodPathfinder = None
+            agent.foodCoords = None
             agent.gatherFood(sim)
             return True
 
@@ -199,6 +194,17 @@ class RandomWalkNode(TaskNode):
         # agent.move(xNew, yNew, sim)
         #
         # return False
+
+
+# Node that makes the agent do literally nothing
+class StayNode(TaskNode):
+
+    def __init__(self):
+        TaskNode.__init__(self)
+        self.name = "Stay"
+
+    def act(self, sim, agent):
+        return True
 
 
 def initNodes():

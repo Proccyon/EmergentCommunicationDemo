@@ -8,6 +8,7 @@ from Optimizer import Settings, Results, run
 from AutomataTester import PopExpSettings, PopExpResults, CommRangeExpSettings, CommRangeExpResults
 from Map import getMapDict
 from Parallelizer import runAsync
+from ParameterOptimizer import ParameterOptimizerSettings, ParameterOptimizerResults, Parameters
 
 #-----ResultsReader-----#
 
@@ -104,7 +105,7 @@ def printBestAutomata(results):
 def getRealScore(settings, results, runs):
 
     mapDict = getMapDict()
-    map = mapDict[settings.mapSettings.name](settings.mapSettings).init()
+    map = mapDict[settings.mapSettings.name](settings.mapSettings).generateArrays()
 
     automataArray, scoreArray = results.automataArray, results.scoreArray
     bestAutomataList = []
@@ -211,7 +212,6 @@ def plotCommScoreGraph(settings, results, automataNames, colorList):
 def plotCommScoreGraphSingle(settings, results, color, index=0):
 
     fig, ax1, = plt.subplots(figsize=(10, 5))
-    ax2 = ax1.twinx()
 
     scoreArray = results.scoreArray / results.maxScore
     commRangeList = settings.commRangeList
@@ -220,31 +220,27 @@ def plotCommScoreGraphSingle(settings, results, color, index=0):
     maxDensity = np.amax(results.bestFoodDensityArray)
     avgMaxFoodReached = np.average(results.bestFoodDensityArray == maxDensity, axis=2)
     avgFoodCollected = np.average(results.foodCollectedArray, axis=2) / np.amax(results.foodCollectedArray)
-    print(results.foodCollectedArray)
 
     scoreList = scoreArray[index, :, :]
     avgScoreList = np.average(scoreList, axis=1)
     lowerBound = np.percentile(scoreList, 15.9, axis=1)
     upperBound = np.percentile(scoreList, 84.1, axis=1)
 
-    line1, = ax1.plot(commRangeList, avgScoreList, label="Average score", color=color)
+    line1, = ax1.plot(commRangeList, avgScoreList, label="Average score(normalized)", color=color)
     ax1.scatter(commRangeList, avgScoreList, color=color, s=12)
     ax1.plot(commRangeList, lowerBound, alpha=0.1, color=color)
     ax1.plot(commRangeList, upperBound, alpha=0.1, color=color)
     ax1.fill_between(commRangeList, lowerBound, upperBound, alpha=0.25, color=color)
-    maxScore = max(maxScore, np.amax(upperBound))
 
-    line2, = ax2.plot(avgMaxFoodReached[index,:], linestyle="--", color="black", label="p(bestFoodReached)")
-    line3, = ax2.plot(avgFoodCollected[index,:], linestyle="--", color="red", label="Average food collected")
+    line2, = ax1.plot(avgMaxFoodReached[index,:], linestyle="--", color="black", label="p(bestFoodReached)")
+    line3, = ax1.plot(avgFoodCollected[index,:], linestyle="--", color="red", label="Average food collected(normalized)")
 
-    ax1.set_title(f"Score vs commRange with Tmax={settings.op.tMax}, population={settings.mapSettings.creatureCount}")
+    ax1.set_title(f"Score vs commRange with Tmax={settings.op.tMax}, population={settings.mapSettings.creatureCount}, R={settings.mapSettings.r1}")
     ax1.set_xlim(0, np.amax(commRangeList))
-    ax1.set_ylim(0, 1.1 * maxScore)
-    ax2.set_ylim(0, 1.1)
+    ax1.set_ylim(0, 1.05)
 
     ax1.set_xlabel("Maximum communication range")
-    ax1.set_ylabel("Average Score per agent / Max possible score")
-    ax2.set_ylabel("Fraction of runs where best food is reached")
+    ax1.set_ylabel("Fraction")
 
     ax1.grid(linestyle="--", alpha=0.5)
 
@@ -252,22 +248,142 @@ def plotCommScoreGraphSingle(settings, results, color, index=0):
     labels = [line.get_label() for line in lines]
     ax1.legend(lines, labels, loc='upper right', fontsize=8)
 
-
-
-
-
-
-
-    # # Plot on the second subplot
-    # ax2.plot(x, y2, color='green', label='cos(x)')
-    # ax2.set_title('Cosine Function')
-    # ax2.set_xlabel('x')
-    # ax2.set_ylabel('cos(x)')
-    # ax2.legend()
-    #
-    # # Display the plots
-    # plt.tight_layout()  # Adjusts the layout to prevent overlap
     plt.show()
+
+
+
+def plotCommScoreMultSizes(settingsList, resultsList, colorList, useAUC=False, plotPopulation=False):
+
+    maxScore = 0
+    xMax = 0
+    yMax = 0
+    for i in range(len(settingsList)):
+        settings, results, color = settingsList[i], resultsList[i], colorList[i]
+
+        if useAUC:
+            scoreArray = results.uacArray / results.maxUAC
+        else:
+            scoreArray = results.scoreArray / results.maxScore
+        commRangeList = settings.commRangeList
+
+        scoreList = scoreArray[0, :, :]
+        avgScoreList = np.average(scoreList, axis=1)
+
+        color = colorList[i]
+        if plotPopulation:
+            label = f"popSize={settings.mapSettings.creatureCount}"
+        else:
+            label = f"{settings.mapSettings.name}(R={settings.mapSettings.r1})"
+
+        plt.plot(commRangeList, avgScoreList, label=label, color=color)
+        plt.scatter(commRangeList, avgScoreList, color=color, s=12)
+
+        maxScore = max(maxScore, np.amax(scoreList))
+        xMax = max(xMax, np.amax(commRangeList))
+        yMax = max(yMax, np.amax(avgScoreList))
+
+    if useAUC:
+        metric = "AUC"
+    else:
+        metric = "Score"
+
+    if plotPopulation:
+        plt.title(f"{metric} vs commRange with Tmax={settings.op.tMax}, R={settings.mapSettings.r1}")
+    else:
+        plt.title(f"{metric} vs commRange with Tmax={settings.op.tMax}, population={settings.mapSettings.creatureCount}")
+
+    plt.xlim(0, xMax)
+    plt.ylim(0, min(yMax * 1.1, 1))
+
+    plt.xlabel("Maximum communication range")
+    plt.ylabel("Average Score / max theoretical score")
+
+    plt.grid(linestyle="--", alpha=0.5)
+    plt.legend(fontsize=8)
+
+    plt.show()
+
+def plotCommRangeOptimizerProgession(settings, results):
+
+
+    parameterArray = results.parameterArray
+
+    commRangeArray = np.array([[parameter.valueDict["commRange"] for parameter in parameterList] for parameterList in parameterArray])
+    # plt.xticks(range(len(commRangeArray)))
+
+
+    commRangeAvg = np.average(commRangeArray[3:,:])
+
+
+    for i in range(commRangeArray.shape[1]):
+        plt.scatter(range(len(commRangeArray)), commRangeArray[:,i], color="black",alpha=0.5)
+
+
+    plt.yticks(range(int(np.amax(commRangeArray))+2))
+    plt.xlim(-1, len(commRangeArray))
+    plt.hlines(commRangeAvg, -10, len(commRangeArray), linestyle="--", color="red", label="average")
+    plt.title(f"CommRange optimization for R={settings.mapSettings.r1}, popSize={settings.mapSettings.creatureCount}")
+
+    plt.xlabel("Generation")
+    plt.ylabel("Communication range")
+
+    plt.grid(linestyle="--", alpha=0.5)
+    plt.legend()
+
+    plt.show()
+
+def plotOptimalCommRange(settingsList, resultsList, nCut = 3, xPopSize=False):
+
+    RList = []
+    popSizeList = []
+    commRangeList = []
+
+    for i in range(len(settingsList)):
+
+        settings, results = settingsList[i], resultsList[i]
+        parameterArray = results.parameterArray
+
+        commRangeArray = np.array(
+            [[parameter.valueDict["commRange"] for parameter in parameterList] for parameterList in parameterArray])
+
+        R, popSize = settings.mapSettings.r1, settings.mapSettings.creatureCount
+        commRange = np.average(commRangeArray[3:, :])
+
+        RList.append(R)
+        popSizeList.append(popSize)
+        commRangeList.append(commRange)
+
+    RList, popSizeList, commRangeList = np.array(RList), np.array(popSizeList), np.array(commRangeList)
+
+    if xPopSize:
+
+        for R in np.unique(RList):
+            cond = RList == R
+
+
+            plt.plot(popSizeList[cond], commRangeList[cond], label=f"roomSize={R}")
+            plt.scatter(popSizeList[cond], commRangeList[cond])
+
+        plt.xlabel("Population Size")
+    else:
+
+        for popSize in np.unique(popSizeList):
+            cond = popSizeList == popSize
+
+            plt.plot(RList[cond], commRangeList[cond], label=f"popSize={popSize}")
+            plt.scatter(RList[cond], commRangeList[cond])
+
+        plt.xlabel("Room Size")
+
+    plt.ylabel("Optimal Communication range")
+
+    plt.legend()
+    plt.grid(linestyle="--")
+    plt.show()
+
+
+
+
 
 if __name__ == "__main__":
 
@@ -293,14 +409,60 @@ if __name__ == "__main__":
 
         plotPopScoreGraph(settings, results, ["Mute Agent", "Communicating Agent"])
 
-    if True:
+    if False:
 
         settingsArray, resultsArray = readResults("CommRangeExperiment")
 
-        settings = settingsArray[8]
-        results = resultsArray[8][0]
+        settings = settingsArray[14]
+        results = resultsArray[14][0]
 
         plotCommScoreGraphSingle(settings, results, "green")
+
+    if False:
+
+        indices = [11, 12, 13, 14, 15]
+
+        settingsArray, resultsArray = readResults("CommRangeExperiment")
+
+        settingsList = [settingsArray[i] for i in indices]
+        resultsList = [resultsArray[i][0] for i in indices]
+        colorList = ["red", "blue", "green", "orange", "purple"]
+
+        plotCommScoreMultSizes(settingsList, resultsList, colorList, False)
+
+    if False:
+
+        indices = [14, 16, 17, 18]
+
+        settingsArray, resultsArray = readResults("CommRangeExperiment")
+
+        settingsList = [settingsArray[i] for i in indices]
+        resultsList = [resultsArray[i][0] for i in indices]
+        colorList = ["red", "blue", "green", "orange"]
+
+        plotCommScoreMultSizes(settingsList, resultsList, colorList, True, True)
+
+    if False:
+
+        settingsArray, resultsArray = readResults("CommRangeOptimizer")
+
+        index = 12
+        settings = settingsArray[index]
+        results = resultsArray[index][0]
+
+        plotCommRangeOptimizerProgession(settings, results)
+
+    if True:
+
+        settingsArray, resultsArray = readResults("CommRangeOptimizer")
+
+        indices = range(12, 31)
+        settingsList = [settingsArray[i] for i in indices]
+        resultsList = [resultsArray[i][0] for i in indices]
+
+        plotOptimalCommRange(settingsList, resultsList, 3, True)
+
+
 
 
 

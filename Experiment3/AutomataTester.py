@@ -9,6 +9,7 @@ from BehaviourTree import *
 from Conditions import OptimizationParameters
 from Saver import save
 import time
+from Pathfinder import *
 
 def run(i, map, automata, simSettings, tMax):
     return runSimHidden(i, map, automata, simSettings, tMax)
@@ -41,11 +42,11 @@ class PopExpSettings:
 
 class PopExpResults:
 
-    def __init__(self, scoreArray, maxScoreList, uacArray, maxUACList, bestFoodDensityArray, foodCollectedArray):
+    def __init__(self, scoreArray, maxScoreList, aucArray, maxAUCList, bestFoodDensityArray, foodCollectedArray):
         self.scoreArray = scoreArray
         self.maxScoreList = maxScoreList
-        self.uacArray = uacArray
-        self.maxUACList = maxUACList
+        self.uacArray = aucArray
+        self.maxAUCList = maxAUCList
         self.bestFoodDensityArray = bestFoodDensityArray
         self.foodCollectedArray = foodCollectedArray
 
@@ -77,24 +78,25 @@ class CommRangeExpSettings:
 
 class CommRangeExpResults:
 
-    def __init__(self, scoreArray, maxScore, uacArray, maxUAC, bestFoodDensityArray, foodCollectedArray):
+    def __init__(self, scoreArray, maxScore, uacArray, maxAUC, bestFoodDensityArray, foodCollectedArray):
         self.scoreArray = scoreArray
         self.maxScore = maxScore
         self.uacArray = uacArray
-        self.maxUAC = maxUAC
+        self.maxUAC = maxAUC
         self.bestFoodDensityArray = bestFoodDensityArray
         self.foodCollectedArray = foodCollectedArray
 
 
 def runPopExperiment(map, simSettings, brainList, populationRange, runsPerPop, op):
 
+    pathfinder = Pathfinder(map).init()
     scoreArray = np.zeros((len(brainList), len(populationRange), runsPerPop))
-    uacArray = np.zeros((len(brainList), len(populationRange), runsPerPop))
+    aucArray = np.zeros((len(brainList), len(populationRange), runsPerPop))
     bestFoodDensityArray = np.zeros((len(brainList), len(populationRange), runsPerPop))
     foodCollectedArray = np.zeros((len(brainList), len(populationRange), runsPerPop))
     baseFoodAmount = map.foodAmount
     maxScoreList = []
-    maxUACList = []
+    maxAUCList = []
 
     for i, populationSize in enumerate(populationRange):
         print(f"Running for population size {populationSize}...")
@@ -102,32 +104,33 @@ def runPopExperiment(map, simSettings, brainList, populationRange, runsPerPop, o
         map.foodAmount = populationSize * baseFoodAmount
         map.generateCreatures()
         map.generateFood()
-        maxScore = map.calculateMaxScore(op.tMax, populationSize)
+        maxScore = map.calculateMaxScore(op.tMax, populationSize, pathfinder)
         maxScoreList.append(maxScore)
-        maxUAC = map.calculateMaxAUC(op.tMax, populationSize)
-        maxUACList.append(maxUAC)
+        maxUAC = map.calculateMaxAUC(op.tMax, populationSize, pathfinder)
+        maxAUCList.append(maxUAC)
         for j, brain in enumerate(brainList):
             print(f"Running for brain {j+1}...")
             startTime = time.time()
             resultsList = runAsync(run, runsPerPop, [map, brain, simSettings, op.tMax])
             scoreArray[j, i, :] = np.array([results[0] for results in resultsList])
-            uacArray[j, i, :] = np.array([results[1] for results in resultsList])
+            aucArray[j, i, :] = np.array([results[1] for results in resultsList])
             bestFoodDensityArray[j, i, :] = np.array([results[2] for results in resultsList])
             foodCollectedArray[j, i, :] = np.array([results[3] for results in resultsList])
             dt = int(time.time() - startTime)
             print(f"Run {i + 1}.{j+1}/{len(populationRange)}, minScore={np.amin(scoreArray[j, i, :])}, maxScore={np.amax(scoreArray[j, i, :])}, avgScore={np.average(scoreArray[j, i, :])}, time={dt}s")
 
-    return PopExpResults(scoreArray, maxScoreList, uacArray, maxUACList, bestFoodDensityArray, foodCollectedArray)
+    return PopExpResults(scoreArray, maxScoreList, aucArray, maxAUCList, bestFoodDensityArray, foodCollectedArray)
 
 
 def runCommRangeExperiment(map, simSettings, brainList, commRangeList, runsPerComm, op):
 
+    pathfinder = Pathfinder(map).init()
     scoreArray = np.zeros((len(brainList), len(commRangeList), runsPerComm))
-    maxScore = map.calculateMaxScore(op.tMax, map.creatureCount)
-    uacArray = np.zeros((len(brainList), len(commRangeList), runsPerComm))
+    maxScore = map.calculateMaxScore(op.tMax, map.creatureCount, pathfinder)
+    aucArray = np.zeros((len(brainList), len(commRangeList), runsPerComm))
     bestFoodDensityArray = np.zeros((len(brainList), len(commRangeList), runsPerComm))
     foodCollectedArray = np.zeros((len(brainList), len(commRangeList), runsPerComm))
-    maxUAC = map.calculateMaxAUC(op.tMax, map.creatureCount)
+    maxAUC = map.calculateMaxAUC(op.tMax, map.creatureCount, pathfinder)
 
     for i, commRange in enumerate(commRangeList):
         print(f"Running for comm Range {commRange}...")
@@ -137,13 +140,13 @@ def runCommRangeExperiment(map, simSettings, brainList, commRangeList, runsPerCo
             simSettings.commRange = commRange
             resultsList = runAsync(runSimHidden, runsPerComm, [map, brain, simSettings, op.tMax])
             scoreArray[j, i, :] = np.array([results[0] for results in resultsList])
-            uacArray[j, i, :] = np.array([results[1] for results in resultsList])
+            aucArray[j, i, :] = np.array([results[1] for results in resultsList])
             bestFoodDensityArray[j, i, :] = np.array([results[2] for results in resultsList])
             foodCollectedArray[j, i, :] = np.array([results[3] for results in resultsList])
             dt = int(time.time() - startTime)
             print(f"Run {i + 1}.{j+1}/{len(commRangeList)}, minScore={np.amin(scoreArray[j, i, :])}, maxScore={np.amax(scoreArray[j, i, :])}, avgScore={np.average(scoreArray[j, i, :])}, time={dt}s")
 
-    return CommRangeExpResults(scoreArray, maxScore, uacArray, maxUAC, bestFoodDensityArray, foodCollectedArray)
+    return CommRangeExpResults(scoreArray, maxScore, aucArray, maxAUC, bestFoodDensityArray, foodCollectedArray)
 
 
 #-----Main-----#
@@ -161,7 +164,7 @@ if __name__ == "__main__":
 
         simSettings = SimSettings(5, 5)
         mapSettings = FourRoomsMapSettings(6, 6, 6, 1, populationRange[0], 10, 1, 2, 4, 8)
-        map = FourRoomsMap(mapSettings).init()
+        map = FourRoomsMap(mapSettings).generateArrays()
 
         results = runPopExperiment(map, simSettings, brainList, populationRange, runsPerPop, op)
 
@@ -170,17 +173,17 @@ if __name__ == "__main__":
 
     if True:
 
-        commRangeList = [0, 1, 2, 3, 4, 5, 6]
+        commRangeList = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         runsPerComm = 200
         op = OptimizationParameters()
         op.tMax = 1000
-        popSize = 30
+        popSize = 5
 
         #brainList = [BehaviourTree().initExploringAgent(0, 0.01), BehaviourTree().initExploringAgent(0.0025, 0.01), BehaviourTree().initExploringAgent(0.005, 0.01)]
-        brainList = [BehaviourTree().initCommunicatingAgent()]
+        brainList = [BehaviourTree().initCommunicatingAgent(30)]
 
         simSettings = SimSettings(5, commRangeList[0])
-        mapSettings = FourRoomsMapSettings(6, 6, 6, 1, popSize, 10*popSize, 1, 2, 4, 8)
+        mapSettings = FourRoomsMapSettings(18, 6, 6, 1, popSize, 10*popSize, 1, 2, 4, 8)
         map = FourRoomsMap(mapSettings).init()
 
         results = runCommRangeExperiment(map, simSettings, brainList, commRangeList, runsPerComm, op)

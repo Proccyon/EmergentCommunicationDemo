@@ -16,8 +16,9 @@ class Agent:
         self.foodDensity = 0
 
         self.boolArray = np.full(10, False, bool)
-        self.foodPathfinder = None
-        self.waypointPathfinder = None
+        self.counterArray = np.full(10, 0, int)
+        self.foodCoords = None
+        self.waypointCoords = None
         self.targetAgent = None
         self.isDone = False
         self.queriedAgent = None
@@ -64,7 +65,7 @@ class Agent:
         if targetAgent is None:
             return
 
-        distance = sim.getPathfinder(self.x, self.y).distanceArray[targetAgent.x, targetAgent.y]
+        distance = sim.getDistance(self.x, self.y, targetAgent.x, targetAgent.y)
         if distance > sim.commRange:
             self.targetAgent = None
 

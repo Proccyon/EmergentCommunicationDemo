@@ -252,15 +252,19 @@ class DynamicValue(Expression):
 
 class GreaterThan(Condition):
 
-    def __init__(self, expr1: Expression, expr2: Expression):
+    def __init__(self, expr1: Expression, expr2: Expression, andEqual=False):
         Condition.__init__(self)
 
         self.expr1, self.expr2 = expr1, expr2
+        self.andEqual = andEqual
 
         self.conditionType = "Inequality"
 
     def run(self, sim, agent) -> bool:
-        return self.expr1.evaluate(sim, agent) > self.expr2.evaluate(sim, agent)
+        if self.andEqual:
+            return self.expr1.evaluate(sim, agent) >= self.expr2.evaluate(sim, agent)
+        else:
+            return self.expr1.evaluate(sim, agent) > self.expr2.evaluate(sim, agent)
 
     def toString(self) -> str:
         return f"{self.expr1.toString()} > {self.expr2.toString()}"
@@ -343,7 +347,7 @@ class IsHoldingFood(AtomicBoolean):
 class IsWaypointSet(AtomicBoolean):
 
     def sense(self, sim, agent) -> bool:
-        return agent.waypointPathfinder is not None
+        return agent.waypointCoords is not None
 
     def varName(self) -> str:
         return "IsWaypointSet"
@@ -394,7 +398,22 @@ class CheckInternalBool(AtomicBoolean):
         return CheckInternalBool(self.target, self.index)
 
 
+class HasNearbyFood(AtomicBoolean):
 
+    def sense(self, sim, agent) -> bool:
+
+        for x, y in sim.foodChunkManager.getNeighbours(agent.x, agent.y):
+            distance = sim.getDistance(agent.x, agent.y, x, y)
+            if distance <= sim.smellRange:
+                return True
+
+        return False
+
+    def varName(self) -> str:
+        return "HasNearbyFood"
+
+    def copy(self):
+        return HasNearbyFood(self.target)
 
 
 #---InequalityImplementations---#
@@ -405,8 +424,7 @@ class NearbyFoodAmount(DynamicValue):
 
         foodCount = 0
         for x, y in sim.foodChunkManager.getNeighbours(agent.x, agent.y):
-            pathfinder = sim.getPathfinder(x, y)
-            distance = pathfinder.getDistance(agent.x, agent.y)
+            distance = sim.getDistance(agent.x, agent.y, x, y)
             if distance <= sim.smellRange:
                 foodCount += 1
 
@@ -445,10 +463,10 @@ class GroundFoodDensity(DynamicValue):
 class WaypointFoodDensity(DynamicValue):
 
     def sense(self, sim, agent):
-        if agent.waypointPathfinder is None:
+        if agent.waypointCoords is None:
             return 0
 
-        x0, y0 = agent.waypointPathfinder.x0, agent.waypointPathfinder.y0
+        x0, y0 = agent.waypointCoords
         return sim.foodDensityArray[x0, y0]
 
     def varName(self) -> str:
@@ -460,10 +478,11 @@ class WaypointFoodDensity(DynamicValue):
 class WaypointDistance(DynamicValue):
 
     def sense(self, sim, agent):
-        if agent.waypointPathfinder is None:
+        if agent.waypointCoords is None:
             return 999
 
-        return agent.waypointPathfinder.distanceArray[agent.x, agent.y]
+        xWaypoint, yWaypoint = agent.waypointCoords
+        return sim.getDistance(agent.x, agent.y, xWaypoint, yWaypoint)
 
     def varName(self) -> str:
         return "WaypointDistance"
@@ -474,11 +493,11 @@ class WaypointDistance(DynamicValue):
 class WaypointFoodAmount(DynamicValue):
 
     def sense(self, sim, agent):
-        if agent.waypointPathfinder is None:
+        if agent.waypointCoords is None:
             return 0
 
-        x0, y0 = agent.waypointPathfinder.x0, agent.waypointPathfinder.y0
-        return sim.foodAmountArray[x0, y0]
+        xWaypoint, yWaypoint = agent.waypointCoords
+        return sim.foodAmountArray[xWaypoint, yWaypoint]
 
     def varName(self) -> str:
         return "WaypointFoodAmount"
@@ -489,8 +508,7 @@ class WaypointFoodAmount(DynamicValue):
 class ColonyDistance(DynamicValue):
 
     def sense(self, sim, agent):
-        pathfinder = sim.getPathfinder(sim.colonyX, sim.colonyY)
-        return pathfinder.distanceArray[agent.x, agent.y]
+        return sim.getDistance(sim.colonyX, sim.colonyY, agent.x, agent.y)
 
     def varName(self) -> str:
         return "ColonyDistance"
@@ -507,15 +525,17 @@ class DistanceBetweenWaypoints(DynamicValue):
 
     def sense(self, sim, agent):
 
-        pathfinder = agent.waypointPathfinder
-        secondPathfinder = None
+        coords = agent.waypointCoords
+        secondCoords = None
         if self.secondTarget == "saved" and agent.targetAgent is not None:
-            secondPathfinder = agent.targetAgent.waypointPathfinder
+            secondCoords = agent.targetAgent.waypointCoords
         elif self.secondTarget == "queried" and agent.queriedAgent is not None:
-            secondPathfinder = agent.queriedAgent.waypointPathfinder
+            secondCoords = agent.queriedAgent.waypointCoords
 
-        if pathfinder is not None and secondPathfinder is not None:
-            return pathfinder.getDistance(secondPathfinder.x0, secondPathfinder.y0)
+        if coords is not None and secondCoords is not None:
+            x0, y0 = coords
+            x1, y1 = secondCoords
+            return sim.getDistance(x0, y0, x1, y1)
         else:
             return 999
 
@@ -528,15 +548,14 @@ class DistanceBetweenWaypoints(DynamicValue):
 # Calculates quality of food at waypoint (food density / distance from colony)
 class WaypointFoodEfficiency(DynamicValue):
 
-
     def sense(self, sim, agent):
 
-        if agent.waypointPathfinder is None:
+        if agent.waypointCoords is None:
             return 0
         else:
-            distance = agent.waypointPathfinder.getDistance(sim.colonyX, sim.colonyY)
-            x0, y0 = agent.waypointPathfinder.x0, agent.waypointPathfinder.y0
-            foodDensity = sim.foodDensityArray[x0, y0]
+            xWaypoint, yWaypoint = agent.waypointCoords
+            distance = sim.getDistance(sim.colonyX, sim.colonyY, xWaypoint, yWaypoint)
+            foodDensity = sim.foodDensityArray[xWaypoint, yWaypoint]
             return foodDensity / distance
 
     def varName(self) -> str:
@@ -544,6 +563,24 @@ class WaypointFoodEfficiency(DynamicValue):
 
     def copy(self):
         return WaypointFoodEfficiency(self.target)
+
+
+# Calculates quality of food at waypoint (food density / distance from colony)
+class CheckInternalCounter(DynamicValue):
+
+    def __init__(self, target: str, index: int):
+        DynamicValue.__init__(self, target)
+        self.index = index
+
+    def sense(self, sim, agent):
+        return agent.counterArray[self.index]
+
+    def varName(self) -> str:
+        return f"Counter{self.index}"
+
+    def copy(self):
+        return CheckInternalCounter(self.target, self.index)
+
 
 
 #---FactoryList---#

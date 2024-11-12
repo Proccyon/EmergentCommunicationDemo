@@ -115,12 +115,13 @@ class BehaviourTree(Brain):
         self.root.add(c4)
         return self
 
-    def initCommunicatingAgent(self):
+    def initCommunicatingAgent(self, tStay: int = 0):
 
         self.root = Selector()
         c0 = Sequence()
-        c0.add(SelectTargetAgent(GreaterThan(WaypointFoodDensity("queried"), WaypointFoodDensity("self"))))
+        c0.add(SelectTargetAgent(GreaterThan(WaypointFoodEfficiency("queried"), WaypointFoodEfficiency("self"))))
         c0.add(CopyWaypoint())
+        c0.add(SetInternalCounter(0, tStay))
         self.root.add(Skipper(c0, False))
 
         c1 = Sequence()
@@ -128,18 +129,24 @@ class BehaviourTree(Brain):
         c1.add(ReturnHomeNode())
         self.root.add(c1)
         c2 = Sequence()
-        c2.add(GreaterThan(NearbyFoodAmount("self"), Constant(0)))
+        c2.add(HasNearbyFood("self"))
         c2.add(SetWaypoint())
         c2.add(GatherNode())
         self.root.add(c2)
         c3 = Sequence()
-        c3.add(IsWaypointSet("self"))
-        c3.add(GoToWaypoint())
+        c3.add(NOT(GreaterThan(CheckInternalCounter("self", 0), Constant(tStay), True)))
+        c3.add(AND(IsWaypointSet("self"), NOT(GreaterThan(ColonyDistance("self"), Constant(0)))))
+        c3.add(IncrementCounter(0))
+        c3.add(StayNode())
         self.root.add(c3)
         c4 = Sequence()
-        c4.add(ResetWaypoint())
-        c4.add(RandomWalkNode())
+        c4.add(IsWaypointSet("self"))
+        c4.add(GoToWaypoint())
         self.root.add(c4)
+        c5 = Sequence()
+        c5.add(ResetWaypoint())
+        c5.add(RandomWalkNode())
+        self.root.add(c5)
         return self
 
     def initExploringAgent(self, pGE, pEG):

@@ -25,19 +25,7 @@ class Map:
         self.creatureAmountArray = np.zeros((Lx, Ly), dtype=int)
         self.neighbourArray = np.empty((Lx, Ly),dtype=list)
 
-        self.pathfinderArray = np.full((Lx, Ly), None, dtype=Pathfinder)
         self.name = ""
-
-    def setupPathfinderArray(self):
-
-        for x in range(self.Lx):
-            for y in range(self.Ly):
-                if self.hasWallArray[x, y]:
-                    continue
-
-                pathfinder = Pathfinder(self, x, y)
-                pathfinder.init()
-                self.pathfinderArray[x, y] = pathfinder
 
     def setupNeighbours(self):
 
@@ -57,8 +45,6 @@ class Map:
         print("Generating map...")
         self.generate()
         self.setupNeighbours()
-        print("Setting up pathfinders...")
-        self.setupPathfinderArray()
         return self
 
     def generate(self):
@@ -82,7 +68,7 @@ class Map:
 
 
     # Calculate the maximum possible score in a given time
-    def calculateMaxScore(self, tMax, popSize):
+    def calculateMaxScore(self, tMax, popSize, pathfinder):
 
         # First we retrieve data about all the food in the map
         foodAmountList = []
@@ -95,7 +81,7 @@ class Map:
 
                 foodAmountList.append(self.foodAmountArray[x, y])
                 foodDensityList.append(self.foodDensityArray[x, y])
-                distance = self.pathfinderArray[self.colonyX, self.colonyY].getDistance(x, y)
+                distance = pathfinder.getDistance(self.colonyX, self.colonyY, x, y)
                 if distance == 0:
                     distance = 1
                 foodDistanceList.append(distance)
@@ -135,16 +121,16 @@ class Map:
 
         return score
 
-    def calculateMaxAUC(self, tMax, popSize):
+    def calculateMaxAUC(self, tMax, popSize, pathfinder):
 
         maxAUC = 0
         for t in range(tMax):
-            maxAUC += self.calculateMaxScore(t+1, popSize)
+            maxAUC += self.calculateMaxScore(t+1, popSize, pathfinder)
 
         return maxAUC / tMax
 
-
-
+    def getFileName(self) -> str:
+        return ""
 
 
 class CircleMapSettings(MapSettings):
@@ -179,6 +165,7 @@ class CircleMap(Map):
 
         self.foodDensityRange = mapSettings.foodDensityRange
         self.foodAmount = mapSettings.foodAmount
+        self.name = mapSettings.name
 
 
     def generate(self):
@@ -206,6 +193,8 @@ class CircleMap(Map):
     def generateCreatures(self):
         self.creatureAmountArray[self.colonyX, self.colonyY] = self.creatureCount
 
+    def getFileName(self) -> str:
+        return f"{self.name}({self.r}, {self.R})"
 
 
 class FourRoomsMapSettings(MapSettings):
@@ -245,6 +234,7 @@ class FourRoomsMap(Map):
         Map.__init__(self, L, L, colonyX, colonyY, mapSettings.creatureCount)
 
         self.foodAmount = mapSettings.foodAmount
+        self.name = mapSettings.name
 
     def generate(self):
 
@@ -282,6 +272,9 @@ class FourRoomsMap(Map):
 
     def generateCreatures(self):
         self.creatureAmountArray[self.colonyX, self.colonyY] = self.creatureCount
+
+    def getFileName(self) -> str:
+        return f"{self.name}({self.r1}, {self.r2}, {self.d}, {self.w})"
 
 def getMapDict():
 

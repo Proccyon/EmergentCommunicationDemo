@@ -3,7 +3,7 @@
 import concurrent.futures
 import numpy as np
 
-def runAsync(func, nRuns, args=[], maxSize=16):
+def runAsync(func, nRuns, args=[], maxSize=200):
 
     resultsList = np.empty(nRuns, dtype=list)
 
@@ -21,7 +21,6 @@ def runAsync(func, nRuns, args=[], maxSize=16):
         with concurrent.futures.ProcessPoolExecutor() as executor:
 
             futures = [executor.submit(func, i, *args) for i in range(currentRuns)]
-
             for future in concurrent.futures.as_completed(futures):
                 try:
                      i, results = future.result()

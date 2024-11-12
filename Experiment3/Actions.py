@@ -30,7 +30,7 @@ class SetWaypoint(Action):
         self.name = "SetWaypoint"
 
     def run(self, sim, agent) -> bool:
-        agent.waypointPathfinder = sim.getPathfinder(agent.x, agent.y)
+        agent.waypointCoords = [agent.x, agent.y]
         return True
 
     def copy(self):
@@ -44,7 +44,7 @@ class ResetWaypoint(Action):
         self.name = "ResetWaypoint"
 
     def run(self, sim, agent) -> bool:
-        agent.waypointPathfinder = None
+        agent.waypointCoords = None
         return True
 
     def copy(self):
@@ -59,10 +59,9 @@ class SelectTargetAgent(Action):
         self.condition = condition
 
     def run(self, sim, agent) -> bool:
-        pathfinder = sim.map.pathfinderArray[agent.x, agent.y]
         agentList = []
         for queriedAgent in sim.agentList:
-            distance = pathfinder.distanceArray[queriedAgent.x, queriedAgent.y]
+            distance = sim.getDistance(agent.x, agent.y, queriedAgent.x, queriedAgent.y)
             agent.queriedAgent = queriedAgent
             if distance <= sim.commRange and (self.condition is None or self.condition.run(sim, agent)):
                 agentList.append(queriedAgent)
@@ -96,7 +95,7 @@ class CopyWaypoint(Action):
 
     def run(self, sim, agent) -> bool:
         if agent.targetAgent is not None:
-            agent.waypointPathfinder = agent.targetAgent.waypointPathfinder
+            agent.waypointCoords = agent.targetAgent.waypointCoords
             return True
         return False
 
@@ -118,6 +117,37 @@ class SetInternalBool(Action):
 
     def copy(self):
         return SetInternalBool(self.index, self.value)
+
+class SetInternalCounter(Action):
+
+    def __init__(self, index: int, value: int):
+        Action.__init__(self)
+        self.index = index
+        self.value = value
+        self.name = f"Counter{index}={value}"
+
+    def run(self, sim, agent) -> bool:
+        agent.counterArray[self.index] = self.value
+        return True
+
+    def copy(self):
+        return SetInternalCounter(self.index, self.value)
+
+class IncrementCounter(Action):
+
+    def __init__(self, index: int):
+        Action.__init__(self)
+        self.index = index
+        self.name = f"Counter{index}+=1"
+
+    def run(self, sim, agent) -> bool:
+        agent.counterArray[self.index] += 1
+        return True
+
+    def copy(self):
+        return IncrementCounter(self.index)
+
+
 
 def getActionFactories():
     return [SetWaypoint, ResetWaypoint, SelectTargetAgent, CopyWaypoint]
