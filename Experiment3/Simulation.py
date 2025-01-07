@@ -14,7 +14,7 @@ from ChunkManager import ChunkManager
 from BaseClasses import Brain
 from Automata import Automata
 from BehaviourTree import BehaviourTree
-from DrawMethods import draw, drawWalls
+from DrawMethods import draw, drawStatic
 from Map import *
 #from Plotter import readResults
 from Parallelizer import runAsync
@@ -22,13 +22,23 @@ from Parallelizer import runAsync
 
 class SimSettings:
 
-    def __init__(self, smellRange, commRange):
+    def __init__(self, smellRange:int, commRange:int, nComm:float, pDistortFloat:float=0, stdDistortFloat:float=0, pDistortCoord:float=0, stdDistortCoord:float=0):
         self.smellRange = smellRange
         self.commRange = commRange
+        self.nComm = nComm
+        self.pDistortFloat = pDistortFloat
+        self.stdDistortFloat = stdDistortFloat
+        self.pDistortCoord = pDistortCoord
+        self.stdDistortCoord = stdDistortCoord
 
     def toString(self):
         return (f"smellRange = {self.smellRange}"
-                f"commRange = {self.commRange}")
+                f"commRange = {self.commRange}"
+                f"nComm = {self.nComm}"
+                f"pDistortFloat = {self.pDistortFloat}"
+                f"stdDistortFloat = {self.stdDistortFloat}"
+                f"pDistortCoord = {self.pDistortCoord}"
+                f"stdDistortCoord = {self.stdDistortCoord}")
 
 class Simulation:
 
@@ -37,6 +47,11 @@ class Simulation:
         self.pathfinder = pathfinder
         self.smellRange = simSettings.smellRange
         self.commRange = simSettings.commRange
+        self.nComm = simSettings.nComm
+        self.pDistortFloat = simSettings.pDistortFloat
+        self.stdDistortFloat = simSettings.stdDistortFloat
+        self.pDistortCoord = simSettings.pDistortCoord
+        self.stdDistortCoord = simSettings.stdDistortCoord
 
         self.agentList = []
         self.foodPosList = []
@@ -45,8 +60,12 @@ class Simulation:
         self.t = 0
         self.score = 0
         self.scoreList = []
+        self.foodCollectedList = []
         self.bestGatheredDensity = 0
         self.foodCollected = 0
+        self.avgAgentCenterDistanceList = []
+        self.avgWaypointCenterDistanceList = []
+        self.avgWaypointAgentDistanceList = []
 
         self.time = time.time()
         self.dtLog = Log()
@@ -60,8 +79,6 @@ class Simulation:
         self.buttons = []
 
         self.batch = pyglet.graphics.Batch()
-
-        self.wallDrawings = drawWalls(self, self.batch)
 
         self.brain = brain
 
@@ -131,12 +148,6 @@ class Simulation:
             if index is not None:
                 del self.foodPosList[index]
 
-
-    def agentWalk(self):
-
-        for agent in self.agentList:
-            agent.walk(self)
-
     def updateLog(self):
 
         newTime = time.time()
@@ -144,17 +155,80 @@ class Simulation:
         self.dtLog.finish()
         self.time = newTime
 
+    def logDistances(self):
+
+        agentCenterDistanceList = []
+        waypointCenterDistanceList = []
+        waypointAgentDistanceList = []
+        for agent in self.agentList:
+            agentCenterDistance = self.pathfinder.getDistance(agent.x, agent.y, self.colonyX, self.colonyY)
+            agentCenterDistanceList.append(agentCenterDistance)
+
+            xWaypoint, yWaypoint = agent.coordsArray[0]
+            if xWaypoint >= 0 or yWaypoint >= 0:
+                waypointCenterDistance = self.pathfinder.getDistance(xWaypoint, yWaypoint, self.colonyX, self.colonyY)
+                waypointAgentDistance = self.pathfinder.getDistance(xWaypoint, yWaypoint, agent.x, agent.y)
+                waypointCenterDistanceList.append(waypointCenterDistance)
+                waypointAgentDistanceList.append(waypointAgentDistance)
+
+        self.avgAgentCenterDistanceList.append(np.average(agentCenterDistanceList))
+
+        if len(waypointCenterDistanceList) > 0:
+            self.avgWaypointCenterDistanceList.append(np.average(waypointCenterDistanceList))
+            self.avgWaypointAgentDistanceList.append(np.average(waypointAgentDistanceList))
+        else:
+            self.avgWaypointCenterDistanceList.append(-1)
+            self.avgWaypointAgentDistanceList.append(-1)
+
+
+    def determineIfAntMill(self, minFoodIncrease=0.15, minWaypointDistance=0.8):
+
+        def averageBackwards(xList, n):
+            xAveraged = np.zeros(xList.shape)
+            for i in range(len(xList)):
+                iMin = max(0, i - n + 1)
+                xAveraged[i] = np.average(xList[iMin:i + 1])
+
+            return xAveraged
+
+        def diff(xList):
+            xDiff = np.diff(xList)
+            return np.insert(xDiff, 0, 0)
+
+        R = self.map.r1 + self.map.d
+        walkDistance = 2 * R + 1
+        nAverage = walkDistance
+
+        foodCollectedArray = averageBackwards(np.array(self.foodCollectedList), nAverage) * nAverage
+        foodIncreaseArray = diff(foodCollectedArray) / (nAverage * len(self.agentList) / walkDistance)
+        waypointDistance = self.avgWaypointCenterDistanceList[-1] / R
+
+        foodConstraint = foodIncreaseArray[-1] < minFoodIncrease
+        waypointConstraint = (waypointDistance < minWaypointDistance) * (waypointDistance >= 0)
+
+        isAntMill = foodConstraint * waypointConstraint
+
+        return isAntMill, foodConstraint, waypointConstraint
+
+
     def step(self):
 
+        # time.sleep(0.1)
         for agent in self.agentList:
             agent.resetTarget(self)
+            agent.nearbyAgentList = None
             self.brain.run(self, agent)
 
+        self.logDistances()
+
         self.scoreList.append(self.score)
+        self.foodCollectedList.append(self.foodCollected)
         self.updateLog()
 
         # if self.runningHidden and self.t % 300 == 0:
         #     print(f"Simulation progress: {self.t} / {self.totalSteps}")
+
+        #print(np.amax([agent.floatArray[0] for agent in self.agentList]))
 
         self.t += 1
 
@@ -162,7 +236,7 @@ class Simulation:
 
         self.runningHidden = False
         self.window = pyglet.window.Window(self.Lx * self.creatureSize + self.sidebarLength, self.Ly * self.creatureSize)
-        self.wallDrawings = drawWalls(self, self.batch)
+        self.staticDrawings = drawStatic(self)
 
         @self.window.event
         def on_draw():
@@ -190,7 +264,8 @@ class Simulation:
         for _ in range(steps):
             self.step()
 
-        return np.array([self.score, np.average(self.scoreList), self.bestGatheredDensity, self.foodCollected])
+        return np.array([self.score, np.average(self.scoreList), self.bestGatheredDensity, self.foodCollected,
+                         self.avgAgentCenterDistanceList, self.avgWaypointCenterDistanceList, self.avgWaypointAgentDistanceList, self.scoreList, self.foodCollectedList], dtype=object)
 
 
 def runSimHidden(id, map, brain, simSettings, tMax):
@@ -206,7 +281,6 @@ def runSim(map, brain, simSettings, pathfinder):
 
 if __name__ == "__main__":
 
-
     # settingsArray, resultsArray = readResults()
     # results = resultsArray[3][0]
     #
@@ -215,18 +289,28 @@ if __name__ == "__main__":
     # bestAutomata = results.automataArray[i, jMax]
 
     automata = Automata().initBaseAutomata()
-    behaviourTree = BehaviourTree().initCommunicatingAgent(30)
+    behaviourTree = BehaviourTree().initCommunicatingAgent(44, -1)
 
-    simSettings = SimSettings(5, 2)
-    mapSettings = FourRoomsMapSettings(22, 6, 6, 1, 30, 300, 1, 2, 4, 8)
+    simSettings = SimSettings(5, 6, 0.6, 0, 0.1, 0.03, 1)
+    mapSettings = FourRoomsMapSettings(18, 6, 6, 1, 20, 300, 1, 2, 4, 8)
     map = FourRoomsMap(mapSettings).init()
     pathfinder = Pathfinder(map).init()
 
+    # mapSettings = TestMapSettings(20, 22, 6, 10)
+    # map = TestMap(mapSettings).init()
+    # pathfinder = Pathfinder(map).init()
+
     # t0 = time.time()
-    # runAsync(runSimHidden, 200, [map, behaviourTree, simSettings, 1000])
+    # runAsync(runSimHidden, 50, [map, behaviourTree, simSettings, 1000])
     # print(time.time() - t0)
 
     runSim(map, behaviourTree, simSettings, pathfinder)
+
+
+
+
+
+
 
 
 

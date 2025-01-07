@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import os
 import pickle
 from Optimizer import Settings, Results, run
-from AutomataTester import PopExpSettings, PopExpResults, CommRangeExpSettings, CommRangeExpResults
+from AutomataTester import *
 from Map import getMapDict
 from Parallelizer import runAsync
 from ParameterOptimizer import ParameterOptimizerSettings, ParameterOptimizerResults, Parameters
+import colorsys
 
 #-----ResultsReader-----#
 
@@ -209,6 +210,10 @@ def plotCommScoreGraph(settings, results, automataNames, colorList):
 
     plt.show()
 
+
+
+
+
 def plotCommScoreGraphSingle(settings, results, color, index=0):
 
     fig, ax1, = plt.subplots(figsize=(10, 5))
@@ -303,6 +308,122 @@ def plotCommScoreMultSizes(settingsList, resultsList, colorList, useAUC=False, p
 
     plt.show()
 
+def plotNComm(settingsList, resultsList, colorList, useAUC=False):
+
+    maxScore = 0
+    xMax = 0
+    yMax = 0
+    for i in range(len(settingsList)):
+        settings, results, color = settingsList[i], resultsList[i], colorList[i]
+        nComm = settings.simSettings.nComm
+
+        if useAUC:
+            scoreArray = results.uacArray / results.maxUAC
+        else:
+            scoreArray = results.scoreArray / results.maxScore
+        commRangeList = settings.commRangeList
+
+        scoreList = scoreArray[0, :, :]
+        avgScoreList = np.average(scoreList, axis=1)
+
+        color = colorList[i]
+
+        plt.plot(commRangeList, avgScoreList, label=f"nComm={nComm}", color=color)
+        plt.scatter(commRangeList, avgScoreList, color=color, s=12)
+
+        maxScore = max(maxScore, np.amax(scoreList))
+        xMax = max(xMax, np.amax(commRangeList))
+        yMax = max(yMax, np.amax(avgScoreList))
+
+    if useAUC:
+        metric = "AUC"
+    else:
+        metric = "Score"
+
+    plt.title(f"{metric} vs commRange with Tmax={settings.op.tMax}, population={settings.mapSettings.creatureCount}, R={settings.mapSettings.r1}")
+
+    plt.xlim(0, xMax)
+    plt.ylim(0, min(yMax * 1.1, 1))
+
+    plt.xlabel("Maximum communication range")
+    plt.ylabel("Average Score / max theoretical score")
+
+    plt.grid(linestyle="--", alpha=0.5)
+    plt.legend(fontsize=8)
+
+    plt.show()
+
+
+def plotPComm(settingsList, resultsList, colorList, useAUC=False, plotPopulation=False, invertX=False):
+
+    maxScore = 0
+    xMax = 0
+    yMax = 0
+    for i in range(len(settingsList)):
+        settings, results, color = settingsList[i], resultsList[i], colorList[i]
+
+        if useAUC:
+            scoreArray = results.uacArray / results.maxUAC
+        else:
+            scoreArray = results.scoreArray / results.maxScore
+        pCommList = np.array([automata.pComm for automata in settings.automataList])
+
+        scoreList = scoreArray[:, 0, :]
+        avgScoreList = np.average(scoreList, axis=1)
+
+        scoreMax = avgScoreList[pCommList > 100][0]
+        scoreMin = avgScoreList[pCommList == 0][0]
+
+        plt.axhline(scoreMin, linestyle="--", color="blue", label="No communication")
+        plt.axhline(scoreMax, linestyle="--", color="green", label="Full communication")
+
+        if invertX:
+            avgScoreList = avgScoreList[pCommList != 0]
+            pCommList = pCommList[pCommList != 0]
+            pCommList = 1 / pCommList
+        else:
+            avgScoreList = avgScoreList[pCommList < 100]
+            pCommList = pCommList[pCommList < 100]
+
+
+        color = colorList[i]
+        if plotPopulation:
+            label = f"popSize={settings.mapSettings.creatureCount}"
+        else:
+            label = f"{settings.mapSettings.name}(R={settings.mapSettings.r1})"
+
+        plt.plot(pCommList, avgScoreList, label=label, color=color)
+        plt.scatter(pCommList, avgScoreList, color=color, s=12)
+
+        maxScore = max(maxScore, np.amax(scoreList))
+        xMax = max(xMax, np.amax(pCommList))
+        yMax = max(yMax, np.amax(avgScoreList))
+
+    if useAUC:
+        metric = "AUC"
+    else:
+        metric = "Score"
+
+    if plotPopulation:
+        plt.title(f"{metric} vs p(comm) with Tmax={settings.op.tMax}, R={settings.mapSettings.r1}")
+    else:
+        plt.title(f"{metric} vs p(comm) with Tmax={settings.op.tMax}, population={settings.mapSettings.creatureCount}")
+
+    plt.xlim(0, xMax)
+    plt.ylim(0, min(yMax * 1.1, 1))
+
+    if invertX:
+        plt.xlabel("1 / p(communication)")
+    else:
+        plt.xlabel("p(communication)")
+    plt.ylabel("Average Score / max theoretical score")
+
+    plt.grid(linestyle="--", alpha=0.5)
+    plt.legend(fontsize=8)
+
+    plt.show()
+
+
 def plotCommRangeOptimizerProgession(settings, results):
 
 
@@ -382,6 +503,184 @@ def plotOptimalCommRange(settingsList, resultsList, nCut = 3, xPopSize=False):
     plt.show()
 
 
+def plotPDistort(settings, results, colorList, useAUC=False):
+
+    maxScore = 0
+    xMax = 0
+    yMax = 0
+
+    for i, simSettingsList in enumerate(settings.simSettingsArray):
+
+        nComm = simSettingsList[0].nComm
+        pDistortList = [simSettings.pDistortCoord for simSettings in simSettingsList]
+
+        if useAUC:
+            scoreArray = results.uacArray[:, i, :] / results.maxUACArray[i, :]
+        else:
+            scoreArray = results.scoreArray[:, i, :] / results.maxScoreArray[i, :]
+
+
+        avgScoreList = np.average(scoreArray, axis=0)
+
+        plt.plot(pDistortList, avgScoreList, label=f"nComm={nComm}", color=colorList[i])
+        plt.scatter(pDistortList, avgScoreList, color=colorList[i], s=12)
+
+        maxScore = max(maxScore, np.amax(avgScoreList))
+        xMax = max(xMax, np.amax(pDistortList))
+        yMax = max(yMax, np.amax(avgScoreList))
+
+    if useAUC:
+        metric = "AUC"
+    else:
+        metric = "Score"
+
+    popSize = settings.mapSettingsArray[0].creatureCount
+    r1 = settings.mapSettingsArray[0].r1
+    plt.title(f"{metric} vs pDistortCoord with Tmax={settings.op.tMax}, population={popSize}, R={r1}")
+
+    plt.xlim(0, xMax)
+    plt.ylim(0, min(yMax * 1.1, 1))
+
+    plt.xlabel("pDistort")
+    plt.ylabel("Average Score / max theoretical score")
+
+    plt.grid(linestyle="--", alpha=0.5)
+    plt.legend(fontsize=8)
+
+    plt.show()
+
+
+def determineIfAntMill(waypointDistances, foodCollected, settings, minFoodIncrease, minWaypointDistance):
+
+    def averageBackwards(xList, n):
+
+        xAveraged = np.zeros(xList.shape)
+        for i in range(xList.shape[1]):
+            iMin = max(0, i - n+1)
+            xAveraged[:, i] = np.average(xList[:, iMin:i+1], axis=1)
+
+        return xAveraged
+
+    def diff(xList):
+        xDiff = np.diff(xList)
+        return np.insert(xDiff, 0, 0,axis=1)
+
+    popSize = settings.mapSettingsArray[0].creatureCount
+    R = settings.mapSettingsArray[0].r1 + settings.mapSettingsArray[0].d
+    walkDistance = 2 * R + 1
+    nAverage = walkDistance
+
+    foodCollectedArray = averageBackwards(foodCollected, nAverage) * nAverage
+    foodIncreaseArray = diff(foodCollectedArray) / (nAverage * popSize / walkDistance)
+
+    isAntMillArray = (foodIncreaseArray < minFoodIncrease) * (waypointDistances < minWaypointDistance) * (waypointDistances >= 0)
+    return isAntMillArray
+
+
+def plotAntMillFactors(settings, results, IncludeDistance1=True, IncludeDistance2=True, includeDistance3=True, includeAntMill=True):
+
+    def average(x):
+        coordSetList = np.sum(x >= 0, axis=0)
+        coordSetList[coordSetList == 0] += 1
+        return np.sum(x * (x >= 0), axis=0) / coordSetList
+
+
+    simSettingsArray = settings.simSettingsArray
+    R = settings.mapSettingsArray[0].r1 + settings.mapSettingsArray[0].d
+    for i in range(len(simSettingsArray)):
+        for j in range(len(simSettingsArray[i,:])):
+            nComm = simSettingsArray[i, j].nComm
+            pDistortCoord = simSettingsArray[i, j].pDistortCoord
+
+            minFoodIncrease = 0.15
+            minWaypointDistance = 0.8
+
+            avgAgentCenterDistanceArray = results.avgAgentCenterDistanceArray[:, :, i, j] / R
+            avgWaypointCenterDistanceArray = results.avgWaypointCenterDistanceArray[:, :, i, j] / R
+            avgWaypointAgentDistanceArray = results.avgWaypointAgentDistanceArray[:, :, i, j] / R
+            foodCollectedArray = results.foodOverTimeArray[:, :, i, j]
+
+            isAntMillArray = determineIfAntMill(avgWaypointCenterDistanceArray, foodCollectedArray, settings, minFoodIncrease, minWaypointDistance)
+
+            distanceArrays = [avgAgentCenterDistanceArray, avgWaypointCenterDistanceArray, avgWaypointAgentDistanceArray, isAntMillArray]
+            distanceNames = ["avg Agent-Center distance", "avg Waypoint-Center distance", "avg Waypoint-Agent distance", "has ant mill"]
+            colorList = ["red", "green", "blue", "orange", "purple", "cyan"]
+            includedList = [IncludeDistance1, IncludeDistance2, includeDistance3, includeAntMill]
+
+            tMax = settings.op.tMax
+
+            for k in range(len(distanceArrays)):
+                if not includedList[k]:
+                    continue
+
+                for distanceList in distanceArrays[k]:
+                    pass
+                    plt.plot(range(tMax), distanceList, color=colorList[k], alpha=0.1)
+
+                plt.plot(range(tMax), average(distanceArrays[k]), color=colorList[k], label=distanceNames[k])
+
+
+            r1 = settings.mapSettingsArray[0].r1
+            plt.title(f"Ant mill formation for R={r1}, nComm={nComm},pDistort={pDistortCoord}")
+
+            plt.xlim(0, tMax)
+            # plt.ylim(0, 1.1)
+
+            plt.xlabel("time(simulation ticks)")
+            plt.ylabel("Average waypoint-center distance")
+
+            plt.grid(linestyle="--", alpha=0.5)
+            plt.legend(fontsize=8)
+
+            plt.show()
+
+def plotAntMillGraph(settings, results):
+
+    green = np.array([122, 97, 80])
+    red = [0, 97, 80]
+
+    simSettingsArray = settings.simSettingsArray
+    R = settings.mapSettingsArray[0].r1 + settings.mapSettingsArray[0].d
+    maxNComm = 0
+    maxpDistort = 0
+
+    plt.axhline(0, color="black", linewidth=1, linestyle="--")
+    plt.axvline(0, color="black", linewidth=1, linestyle="--")
+
+    for i in range(len(simSettingsArray)):
+        for j in range(len(simSettingsArray[i,:])):
+
+            nComm = simSettingsArray[i, j].nComm
+            pDistortCoord = simSettingsArray[i, j].pDistortCoord
+
+            maxNComm = max(nComm, maxNComm)
+            maxpDistort = max(pDistortCoord, maxpDistort)
+
+            minFoodIncrease = 0.15
+            minWaypointDistance = 0.8
+
+            avgWaypointCenterDistanceArray = results.avgWaypointCenterDistanceArray[:, :, i, j] / R
+            foodCollectedArray = results.foodOverTimeArray[:, :, i, j]
+
+            isAntMillArray = determineIfAntMill(avgWaypointCenterDistanceArray, foodCollectedArray, settings, minFoodIncrease, minWaypointDistance)
+            antMillRate = np.average(isAntMillArray[:, 2000:])
+
+            color = green + (red - green) * antMillRate
+            color = colorsys.hsv_to_rgb(color[0] / 359, color[1] / 100, color[2] / 100)
+
+            plt.scatter(nComm, pDistortCoord, color=(color[0],color[1],color[2]))
+
+    plt.xlabel("nComm")
+    plt.ylabel("p(distort)")
+
+
+
+    plt.xlim(-0.1, 1.2 * maxNComm)
+    plt.ylim(-0.005, 1.2 * maxpDistort)
+
+    plt.grid(linestyle="--", alpha=0.5)
+
+    plt.show()
 
 
 
@@ -452,7 +751,7 @@ if __name__ == "__main__":
 
         plotCommRangeOptimizerProgession(settings, results)
 
-    if True:
+    if False:
 
         settingsArray, resultsArray = readResults("CommRangeOptimizer")
 
@@ -462,7 +761,57 @@ if __name__ == "__main__":
 
         plotOptimalCommRange(settingsList, resultsList, 3, True)
 
+    if False:
+
+        settingsArray, resultsArray = readResults("pCommExperiment")
+
+        indices = [2]
+
+        settingsList = [settingsArray[i] for i in indices]
+        resultsList = [resultsArray[i][0] for i in indices]
+        colorList = ["red"]
+
+        plotPComm(settingsList, resultsList, colorList, False, True, False)
+
+    if False:
+
+        indices = list(range(14,20))
+
+        settingsArray, resultsArray = readResults("nCommExperiment")
+
+        settingsList = [settingsArray[i] for i in indices]
+        resultsList = [resultsArray[i][0] for i in indices]
+        colorList = ["red", "blue", "green", "orange", "purple", "darkgoldenrod","deepskyblue", "cyan"]
+
+        plotNComm(settingsList, resultsList, colorList, True)
+
+    if False:
+
+        index = 3
+
+        settingsArray, resultsArray = readResults("pDistort-nCommExperiment")
+        settings, results = settingsArray[index], resultsArray[index][0]
+
+        colorList = ["red", "blue", "green"]
+
+        plotPDistort(settings, results, colorList, False)
+
+    if True:
+
+        index = 9
+
+        settingsArray, resultsArray = readResults("pDistort-nCommExperiment")
+        settings, results = settingsArray[index], resultsArray[index][0]
+
+        plotAntMillFactors(settings, results, False, True, False, False)
 
 
+    if False:
 
+        index = 9
+
+        settingsArray, resultsArray = readResults("pDistort-nCommExperiment")
+        settings, results = settingsArray[index], resultsArray[index][0]
+
+        plotAntMillGraph(settings, results)
 

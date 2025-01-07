@@ -2,9 +2,10 @@
 #-----Imports-----#
 import numpy as np
 from Pathfinder import Pathfinder
-from Conditions import OptimizationParameters
+from Conditions import OptimizationParameters, Expression
 from MutationMethods import mutateCondition
 from BaseClasses import Component
+
 
 class Action(Component):
 
@@ -39,16 +40,17 @@ class SetWaypoint(Action):
 # Reset the saved waypoint
 class ResetWaypoint(Action):
 
-    def __init__(self):
+    def __init__(self, index=0):
         Action.__init__(self)
+        self.index = index
         self.name = "ResetWaypoint"
 
     def run(self, sim, agent) -> bool:
-        agent.waypointCoords = None
+        agent.coordsArray[self.index, :] = [-1, -1]
         return True
 
     def copy(self):
-        return ResetWaypoint()
+        return ResetWaypoint(self.index)
 
 # Select and save a nearby agent that matches given condition
 class SelectTargetAgent(Action):
@@ -59,11 +61,11 @@ class SelectTargetAgent(Action):
         self.condition = condition
 
     def run(self, sim, agent) -> bool:
+        nearbyAgents = agent.getNearbyAgents(sim)
         agentList = []
-        for queriedAgent in sim.agentList:
-            distance = sim.getDistance(agent.x, agent.y, queriedAgent.x, queriedAgent.y)
+        for queriedAgent in nearbyAgents:
             agent.queriedAgent = queriedAgent
-            if distance <= sim.commRange and (self.condition is None or self.condition.run(sim, agent)):
+            if self.condition is None or self.condition.run(sim, agent):
                 agentList.append(queriedAgent)
 
         if len(agentList) > 0:
@@ -102,7 +104,6 @@ class CopyWaypoint(Action):
     def copy(self):
         return CopyWaypoint()
 
-
 class SetInternalBool(Action):
 
     def __init__(self, index: int, value: bool):
@@ -118,6 +119,22 @@ class SetInternalBool(Action):
     def copy(self):
         return SetInternalBool(self.index, self.value)
 
+
+class SetInternalCoord(Action):
+
+    def __init__(self, index: int, value: Expression):
+        Action.__init__(self)
+        self.index = index
+        self.value = value
+        self.name = f"Coord{index}={value.toString()}"
+
+    def run(self, sim, agent) -> bool:
+        agent.coordsArray[self.index, :] = self.value.evaluate(sim, agent)
+        return True
+
+    def copy(self):
+        return SetInternalCoord(self.index, self.value)
+
 class SetInternalCounter(Action):
 
     def __init__(self, index: int, value: int):
@@ -132,6 +149,24 @@ class SetInternalCounter(Action):
 
     def copy(self):
         return SetInternalCounter(self.index, self.value)
+
+class SetInternalFloat(Action):
+
+    def __init__(self, index: int, value: Expression):
+        Action.__init__(self)
+        self.index = index
+        self.value = value
+        self.name = f"Float{index}={value}"
+
+    def run(self, sim, agent) -> bool:
+        agent.floatArray[self.index] = self.value.evaluate(sim, agent)
+        return True
+
+    def copy(self):
+        return SetInternalFloat(self.index, self.value)
+
+    def toString(self):
+        return f"Float{self.index}={self.value.toString()}"
 
 class IncrementCounter(Action):
 

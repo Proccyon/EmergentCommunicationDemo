@@ -142,38 +142,75 @@ class NOT(Condition):
         return 1 + self.cond.size()
 
 
-class Addition(Expression):
+class BinaryExpression(Expression):
 
     def __init__(self, expr1: Expression, expr2: Expression):
         Expression.__init__(self)
         self.expr1, self.expr2 = expr1, expr2
         self.exprType = "BinaryExpr"
+        self.symbol = ""
+
+    def calculate(self, x1: float, x2: float):
+        return 0
 
     def evaluate(self, sim, agent) -> float:
-        return self.expr1.evaluate(sim, agent) + self.expr2.evaluate(sim, agent)
+        return self.calculate(self.expr1.evaluate(sim, agent), self.expr2.evaluate(sim, agent))
 
     def toString(self) -> str:
-        return f"{self.expr1.toString()} + {self.expr2.toString()}"
+        return f"{self.expr1.toString()} {self.symbol} {self.expr2.toString()}"
+
+class Addition(BinaryExpression):
+
+    def __init__(self, expr1: Expression, expr2: Expression):
+        BinaryExpression.__init__(self, expr1, expr2)
+        self.symbol = "+"
+
+    def calculate(self, x1, x2) -> float:
+        return x1 + x2
 
     def copy(self):
         return Addition(self.expr1.copy(), self.expr2.copy())
 
 
-class Subtraction(Expression):
+class Subtraction(BinaryExpression):
 
     def __init__(self, expr1: Expression, expr2: Expression):
-        Expression.__init__(self)
-        self.expr1, self.expr2 = expr1, expr2
-        self.exprType = "BinaryExpr"
+        BinaryExpression.__init__(self, expr1, expr2)
+        self.symbol = "-"
 
-    def evaluate(self, sim, agent) -> float:
-        return self.expr1.evaluate(sim, agent) - self.expr2.evaluate(sim, agent)
-
-    def toString(self) -> str:
-        return f"{self.expr1.toString()} - {self.expr2.toString()}"
+    def calculate(self, x1, x2) -> float:
+        return x1 - x2
 
     def copy(self):
         return Subtraction(self.expr1.copy(), self.expr2.copy())
+
+class Multiplication(BinaryExpression):
+
+    def __init__(self, expr1: Expression, expr2: Expression):
+        BinaryExpression.__init__(self, expr1, expr2)
+        self.symbol = "*"
+
+    def calculate(self, x1, x2) -> float:
+        return x1 * x2
+
+    def copy(self):
+        return Multiplication(self.expr1.copy(), self.expr2.copy())
+
+class Division(BinaryExpression):
+
+    def __init__(self, expr1: Expression, expr2: Expression):
+        BinaryExpression.__init__(self, expr1, expr2)
+        self.symbol = "/"
+
+    def calculate(self, x1, x2) -> float:
+        if x1 == 0:
+            return 0
+        if x2 == 0:
+            return 999
+        return x1 / x2
+
+    def copy(self):
+        return Division(self.expr1.copy(), self.expr2.copy())
 
 class Constant(Expression):
 
@@ -229,14 +266,11 @@ class DynamicValue(Expression):
             else:
                 return 0
         elif self.target == "queried":
-            try:
-                if agent.queriedAgent is not None:
-                    return self.sense(sim, agent.queriedAgent)
-                else:
-                    return 0
-            except:
-                print(sim.brain.toString())
 
+            if agent.queriedAgent is not None:
+                return self.sense(sim, agent.queriedAgent)
+            else:
+                return 0
 
     def sense(self, sim, agent) -> float:
         return 0
@@ -346,14 +380,18 @@ class IsHoldingFood(AtomicBoolean):
 
 class IsWaypointSet(AtomicBoolean):
 
+    def __init__(self, target: str, index: int = 0):
+        AtomicBoolean.__init__(self, target)
+        self.index = index
+
     def sense(self, sim, agent) -> bool:
-        return agent.waypointCoords is not None
+        return agent.coordsArray[self.index, 0] >= 0 and agent.coordsArray[self.index, 1] >= 0
 
     def varName(self) -> str:
         return "IsWaypointSet"
 
     def copy(self):
-        return IsWaypointSet(self.target)
+        return IsWaypointSet(self.target, self.index)
 
 class IsTargetAgentSet(AtomicBoolean):
 
@@ -418,6 +456,17 @@ class HasNearbyFood(AtomicBoolean):
 
 #---InequalityImplementations---#
 
+class GetCurrentCoord(DynamicValue):
+
+    def sense(self, sim, agent):
+        return [agent.x, agent.y]
+
+    def varName(self) -> str:
+        return "CurrentCoord"
+
+    def copy(self):
+        return GetCurrentCoord(self.target)
+
 class NearbyFoodAmount(DynamicValue):
 
     def sense(self, sim, agent):
@@ -430,13 +479,22 @@ class NearbyFoodAmount(DynamicValue):
 
         return foodCount
 
-
-
     def varName(self) -> str:
         return "NearbyFood"
 
     def copy(self):
         return NearbyFoodAmount(self.target)
+
+class NearbyAgentAmount(DynamicValue):
+
+    def sense(self, sim, agent):
+        return len(agent.getNearbyAgents(sim))
+
+    def varName(self) -> str:
+        return "NearbyAgentAmount"
+
+    def copy(self):
+        return NearbyAgentAmount(self.target)
 
 class AgentFoodDensity(DynamicValue):
 
@@ -490,6 +548,26 @@ class WaypointDistance(DynamicValue):
     def copy(self):
         return WaypointDistance(self.target)
 
+
+class WaypointColonyDistance(DynamicValue):
+
+    def __init__(self, target: str, index: int):
+        DynamicValue.__init__(self, target)
+        self.index = index
+
+    def sense(self, sim, agent):
+        if agent.coordsArray[self.index, 0] < 0 or agent.coordsArray[self.index, 1] < 0:
+            return 999
+
+        xWaypoint, yWaypoint = agent.coordsArray[self.index, :]
+        return sim.getDistance(sim.colonyX, sim.colonyY, xWaypoint, yWaypoint)
+
+    def varName(self) -> str:
+        return "WaypointColonyDistance"
+
+    def copy(self):
+        return WaypointColonyDistance(self.target, self.index)
+
 class WaypointFoodAmount(DynamicValue):
 
     def sense(self, sim, agent):
@@ -519,22 +597,16 @@ class ColonyDistance(DynamicValue):
 # Calculates the distance between own waypoint and waypoint of set target(queried or saved)
 class DistanceBetweenWaypoints(DynamicValue):
 
-    def __init__(self, target, secondTarget):
+    def __init__(self, target, coord1: Expression, coord2: Expression):
         DynamicValue.__init__(self, target)
-        self.secondTarget = secondTarget
+        self.coord1, self.coord2 = coord1, coord2
 
     def sense(self, sim, agent):
 
-        coords = agent.waypointCoords
-        secondCoords = None
-        if self.secondTarget == "saved" and agent.targetAgent is not None:
-            secondCoords = agent.targetAgent.waypointCoords
-        elif self.secondTarget == "queried" and agent.queriedAgent is not None:
-            secondCoords = agent.queriedAgent.waypointCoords
+        x0, y0 = self.coord1.evaluate(sim, agent)
+        x1, y1 = self.coord2.evaluate(sim, agent)
 
-        if coords is not None and secondCoords is not None:
-            x0, y0 = coords
-            x1, y1 = secondCoords
+        if x0 >= 0 and y0 >= 0 and x1 >= 0 and y1 >= 0:
             return sim.getDistance(x0, y0, x1, y1)
         else:
             return 999
@@ -543,7 +615,7 @@ class DistanceBetweenWaypoints(DynamicValue):
         return "DistanceBetweenWaypoints"
 
     def copy(self):
-        return DistanceBetweenWaypoints(self.target, self.secondTarget)
+        return DistanceBetweenWaypoints(self.target, self.coord1, self.coord2)
 
 # Calculates quality of food at waypoint (food density / distance from colony)
 class WaypointFoodEfficiency(DynamicValue):
@@ -565,7 +637,6 @@ class WaypointFoodEfficiency(DynamicValue):
         return WaypointFoodEfficiency(self.target)
 
 
-# Calculates quality of food at waypoint (food density / distance from colony)
 class CheckInternalCounter(DynamicValue):
 
     def __init__(self, target: str, index: int):
@@ -581,6 +652,52 @@ class CheckInternalCounter(DynamicValue):
     def copy(self):
         return CheckInternalCounter(self.target, self.index)
 
+# Returns the value of a float that is stored in the memory of an agent
+class CheckInternalFloat(DynamicValue):
+
+    def __init__(self, target: str, index: int):
+        DynamicValue.__init__(self, target)
+        self.index = index
+
+    def sense(self, sim, agent):
+        value = agent.floatArray[self.index]
+
+        # If checking memory of other agent, sometimes distort the data
+        if self.target != "self" and np.random.random() < sim.pDistortFloat:
+            distortion = np.random.normal(0, sim.stdDistortFloat)
+            value *= 2**distortion
+        return value
+
+    def varName(self) -> str:
+        return f"InternalFloat{self.index}"
+
+    def copy(self):
+        return CheckInternalFloat(self.target, self.index)
+
+# Returns a coordinate that is saved in the internal memory of an agent
+class CheckInternalCoord(DynamicValue):
+
+    def __init__(self, target: str, index: int):
+        DynamicValue.__init__(self, target)
+        self.index = index
+
+    def sense(self, sim, agent):
+        xCoord, yCoord = agent.coordsArray[self.index, :]
+
+        # If reading memory of other agent, sometimes distort the coordinate
+        if self.target != "self" and np.random.random() < sim.pDistortCoord:
+            nDistort = np.random.poisson(sim.stdDistortCoord)
+            for _ in range(nDistort):
+                nextCoords = sim.pathfinder.getPrev(xCoord, yCoord, xCoord, yCoord)
+                xCoord, yCoord = nextCoords[np.random.randint(len(nextCoords))]
+
+        return [xCoord, yCoord]
+
+    def varName(self) -> str:
+        return f"InternalCoords{self.index}"
+
+    def copy(self):
+        return CheckInternalCoord(self.target, self.index)
 
 
 #---FactoryList---#

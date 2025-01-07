@@ -17,11 +17,15 @@ class Agent:
 
         self.boolArray = np.full(10, False, bool)
         self.counterArray = np.full(10, 0, int)
+        self.floatArray = np.full(10, 0, float)
+        self.coordsArray = np.full((10,2), -1, int)
+
         self.foodCoords = None
         self.waypointCoords = None
         self.targetAgent = None
         self.isDone = False
         self.queriedAgent = None
+        self.nearbyAgentList = None
 
     def move(self, xNew: int, yNew: int, sim):
 
@@ -68,6 +72,22 @@ class Agent:
         distance = sim.getDistance(self.x, self.y, targetAgent.x, targetAgent.y)
         if distance > sim.commRange:
             self.targetAgent = None
+
+    def getNearbyAgents(self, sim):
+
+        if self.nearbyAgentList is not None:
+            return self.nearbyAgentList
+        else:
+            agentList = []
+            for queriedAgent in sim.agentList:
+                if self.id == queriedAgent.id:
+                    continue
+                distance = sim.getDistance(self.x, self.y, queriedAgent.x, queriedAgent.y)
+                if distance <= sim.commRange:
+                    agentList.append(queriedAgent)
+
+            self.nearbyAgentList = agentList
+            return agentList
 
 
 

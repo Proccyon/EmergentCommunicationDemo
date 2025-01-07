@@ -88,15 +88,16 @@ class ReturnHomeNode(TaskNode):
 # Node that makes the agent move towards its set coordinates
 class GoToWaypoint(TaskNode):
 
-    def __init__(self):
+    def __init__(self, index: int = 0):
         TaskNode.__init__(self)
+        self.index = index
         self.name = "Go waypoint"
 
     def act(self, sim, agent):
 
-        xWaypoint, yWaypoint = agent.waypointCoords
+        xWaypoint, yWaypoint = agent.coordsArray[self.index, :]
 
-        if agent.waypointCoords is None:
+        if xWaypoint <= -1 or yWaypoint <= -1:
             return False
 
         # Find possible next positions we can move to so we move towards the waypoint

@@ -132,6 +132,59 @@ class Map:
     def getFileName(self) -> str:
         return ""
 
+class TestMapSettings(MapSettings):
+
+    def __init__(self, r, R, creatureCount, foodAmount):
+        MapSettings.__init__(self)
+        self.name = "TestMap"
+        self.r, self.R = r, R
+        self.creatureCount = creatureCount
+        self.foodAmount = foodAmount
+
+    def toString(self):
+
+        return (f"{self.name}(\n"
+                f"creature Count = {self.creatureCount}\n"
+                f"r = {self.r}\n"
+                f"R = {self.R}\n"
+                f"foodAmount = {self.foodAmount}\n"
+                f")")
+
+
+class TestMap(Map):
+
+    def __init__(self, mapSettings: TestMapSettings):
+
+        self.r, self.R = mapSettings.r, mapSettings.R
+        Lx, Ly = 2*self.R+1, 2*self.R+1
+        colonyX, colonyY = self.R, self.R
+        Map.__init__(self, Lx, Ly, colonyX, colonyY, mapSettings.creatureCount)
+
+        self.foodAmount = mapSettings.foodAmount
+        self.name = mapSettings.name
+
+
+    def generate(self):
+
+        self.generateWalls()
+        self.generateFood()
+        self.generateCreatures()
+
+    def generateWalls(self):
+        self.removeWallCirlce(self.colonyX, self.colonyY, self.r)
+
+    def generateFood(self):
+
+        self.placeFoodCircle(self.colonyX + 12, self.colonyY, 3, self.foodAmount, 1)
+        self.placeFoodCircle(self.colonyX - 12, self.colonyY, 3, self.foodAmount, 2)
+        self.placeFoodCircle(self.colonyX, self.colonyY + 12, 3, self.foodAmount, 3)
+
+    def generateCreatures(self):
+        self.creatureAmountArray[self.colonyX, self.colonyY] = self.creatureCount
+
+    def getFileName(self) -> str:
+        return f"{self.name}({self.r}, {self.R})"
+
 
 class CircleMapSettings(MapSettings):
 

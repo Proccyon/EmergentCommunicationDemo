@@ -74,6 +74,72 @@ class Skipper(Component):
     def toString(self) -> str:
         return "skipper"
 
+
+# Component that runs another component zero or more times
+class Loop(Component):
+
+    def __init__(self, child: Component):
+        Component.__init__(self)
+        self.type = "loop"
+        self.child = child
+
+    # This function is run before the loop possibly to set up stuff to loop through
+    def initRun(self, sim, agent):
+        pass
+
+    # This is run each step to check if the loop continues and to update what is looped over
+    def step(self, sim, agent) -> bool:
+        return False
+
+
+    def run(self, sim, agent) -> bool:
+
+        self.initRun(sim, agent)
+
+        finalSuccess = False
+        while self.step(sim, agent):
+            success = self.child.run(sim, agent)
+            if success:
+                finalSuccess = True
+        return finalSuccess
+
+# Loop through all nearby agents that fulfill a condition and communicate with each
+class CommunicationLoop(Loop):
+
+    def __init__(self, child, condition=None):
+        Loop.__init__(self, child)
+        self.condition = condition
+
+    # Gets all agents that are within range and fulfill the condition
+    def initRun(self, sim, agent):
+
+        # First find all relevant agents
+        nearbyAgents = agent.getNearbyAgents(sim)
+        selectedAgents = []
+        for nearbyAgent in nearbyAgents:
+            agent.queriedAgent = nearbyAgent
+            if self.condition is None or self.condition.run(sim, agent):
+                selectedAgents.append(nearbyAgent)
+
+        if len(selectedAgents) == 0:
+            agent.queriedAgents = []
+        else:
+
+            # Determine how many agents can be communicated with
+            nQueried = min(len(selectedAgents), np.random.poisson(sim.nComm))
+
+            # Randomly select which agents are communicated with
+            agent.queriedAgents = list(np.random.choice(selectedAgents, nQueried, replace=False))
+
+    # Set the next agent to communicate with
+    def step(self, sim, agent):
+        if len(agent.queriedAgents) == 0:
+            return False
+        else:
+            agent.queriedAgent = agent.queriedAgents.pop(0)
+            return True
+
+
 class BehaviourTree(Brain):
 
     def __init__(self):
@@ -115,14 +181,36 @@ class BehaviourTree(Brain):
         self.root.add(c4)
         return self
 
-    def initCommunicatingAgent(self, tStay: int = 0):
+    def initCommunicatingAgent(self, tStay: int = 0, rMin=0):
 
+        self.tStay = tStay
         self.root = Selector()
         c0 = Sequence()
-        c0.add(SelectTargetAgent(GreaterThan(WaypointFoodEfficiency("queried"), WaypointFoodEfficiency("self"))))
-        c0.add(CopyWaypoint())
-        c0.add(SetInternalCounter(0, tStay))
-        self.root.add(Skipper(c0, False))
+
+        # Retrieve the waypoint and waypoint food density from queried agent
+        c0.add(SetInternalCoord(1, CheckInternalCoord("queried", 0)))
+        c0.add(SetInternalFloat(1, CheckInternalFloat("queried", 0)))
+
+        # Only copy waypoint if target waypoint is at a minimum distance of current waypoint
+        # waypointDistance = DistanceBetweenWaypoints("self", CheckInternalCoord("self",0), CheckInternalCoord("self",1))
+        # c0.add(GreaterThan(waypointDistance, Constant(rMin)))
+
+        waypointDistance = DistanceBetweenWaypoints("self", GetCurrentCoord("self"), CheckInternalCoord("self", 1))
+        c0.add(GreaterThan(waypointDistance, Constant(rMin)))
+
+        # Calculate efficiency of each food (energy / distance)
+        queriedFoodValue = Division(CheckInternalFloat("self", 1), WaypointColonyDistance("self", 1))
+        selfFoodValue = Division(CheckInternalFloat("self", 0), WaypointColonyDistance("self", 0))
+
+        # Only continue if queried agent has found better food than me
+        c0.add(GreaterThan(queriedFoodValue, selfFoodValue))
+
+        # Copy coordinates & food density of queried agent
+        c0.add(SetInternalCoord(0, CheckInternalCoord("self", 1)))
+        c0.add(SetInternalFloat(0, CheckInternalFloat("self", 1)))
+
+        loop = CommunicationLoop(c0, IsWaypointSet("queried", 0))
+        self.root.add(Skipper(loop, False))
 
         c1 = Sequence()
         c1.add(IsHoldingFood("self"))
@@ -130,7 +218,8 @@ class BehaviourTree(Brain):
         self.root.add(c1)
         c2 = Sequence()
         c2.add(HasNearbyFood("self"))
-        c2.add(SetWaypoint())
+        c2.add(SetInternalCoord(0, GetCurrentCoord("self")))
+        c2.add(SetInternalFloat(0, GroundFoodDensity("self")))
         c2.add(GatherNode())
         self.root.add(c2)
         c3 = Sequence()
@@ -140,11 +229,12 @@ class BehaviourTree(Brain):
         c3.add(StayNode())
         self.root.add(c3)
         c4 = Sequence()
-        c4.add(IsWaypointSet("self"))
+        c4.add(IsWaypointSet("self", 0))
         c4.add(GoToWaypoint())
         self.root.add(c4)
         c5 = Sequence()
-        c5.add(ResetWaypoint())
+        c5.add(ResetWaypoint(0))
+        c5.add(SetInternalFloat(0, Constant(0)))
         c5.add(RandomWalkNode())
         self.root.add(c5)
         return self
@@ -224,10 +314,6 @@ class BehaviourTree(Brain):
         c4.add(RandomWalkNode())
         self.root.add(c4)
         return self
-
-
-
-
 
     def run(self, sim, agent):
         agent.isDone = False
